@@ -1,0 +1,1 @@
+export {reactive} from './src/reactive.js';
