@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     // 一行最多多少个字符
     "printWidth": 150,
     // 指定每个缩进级别的空格数
