@@ -2,6 +2,9 @@
 function isObject(value) {
   return value !== null && typeof value === "object";
 }
+function isFunction(value) {
+  return typeof value === "function";
+}
 
 // packages/reactive/src/effect.ts
 function effect(fn, options = {}) {
@@ -161,8 +164,138 @@ function creatReactiveObject(target) {
   reactiveMap.set(target, proxy);
   return proxy;
 }
+
+// packages/reactive/src/ref.ts
+function ref(value) {
+  return createRef(value);
+}
+function createRef(value) {
+  return new RefImpl(value);
+}
+function createReactive(value) {
+  return isObject(value) ? reactive(value) : value;
+}
+function trackRefValue(ref2) {
+  if (activeEffect) {
+    trackEffect(activeEffect, ref2.dep);
+  }
+}
+function triggerRefValue(ref2) {
+  triggerEffects(ref2.dep);
+}
+var RefImpl = class {
+  __v_isRef = true;
+  _rawValue;
+  dep = /* @__PURE__ */ new Map();
+  constructor(value) {
+    this._rawValue = value;
+  }
+  get value() {
+    trackRefValue(this);
+    return createReactive(this._rawValue);
+  }
+  set value(newValue) {
+    if (newValue === this._rawValue) return;
+    if (isObject(newValue)) {
+      this._rawValue = reactive(newValue);
+    } else {
+      this._rawValue = newValue;
+    }
+    triggerRefValue(this);
+  }
+};
+var ObjectRefImpl = class {
+  constructor(_object, _key) {
+    this._object = _object;
+    this._key = _key;
+  }
+  __v_isRef = true;
+  get value() {
+    return this._object[this._key];
+  }
+  set value(newValue) {
+    this._object[this._key] = newValue;
+  }
+};
+function toRef(object, key) {
+  return new ObjectRefImpl(object, key);
+}
+function toRefs(object) {
+  const result = {};
+  for (let key in object) {
+    result[key] = toRef(object, key);
+  }
+  return result;
+}
+function proxyRef(value) {
+  return new Proxy(value, {
+    get(target, key, receiver) {
+      const r = Reflect.get(target, key, receiver);
+      return isRef(r) ? r.value : r;
+    },
+    set(target, key, value2, receiver) {
+      const r = Reflect.get(target, key, receiver);
+      if (isRef(r)) {
+        r.value = value2;
+        return true;
+      } else {
+        return Reflect.set(target, key, value2, receiver);
+      }
+    }
+  });
+}
+function isRef(r) {
+  return r ? r.__v_isRef === true : false;
+}
+
+// packages/reactive/src/computed.ts
+function computed(getter) {
+  return creatComputedRef(getter);
+}
+function creatComputedRef(getter) {
+  if (isFunction(getter)) {
+    return new ComputedRefImpl(getter, void 0);
+  } else {
+    return new ComputedRefImpl(getter.get, getter.set);
+  }
+}
+var ComputedRefImpl = class {
+  constructor(_getter, _setter) {
+    this._getter = _getter;
+    this._setter = _setter;
+    this._effect = new ReactiveEffect(_getter, () => {
+      this._dirty = true;
+      triggerRefValue(this);
+    });
+  }
+  __v_isRef = true;
+  _value;
+  _dirty = true;
+  _effect;
+  dep = /* @__PURE__ */ new Map();
+  set value(newValue) {
+    if (this._setter) {
+      this._setter(newValue);
+    } else {
+      console.warn("computed is readonly");
+    }
+  }
+  get value() {
+    trackRefValue(this);
+    if (this._dirty) {
+      this._dirty = false;
+      this._value = this._effect.run();
+    }
+    return this._value;
+  }
+};
 export {
+  computed,
   effect,
-  reactive
+  proxyRef,
+  reactive,
+  ref,
+  toRef,
+  toRefs
 };
 //# sourceMappingURL=reactive.js.map

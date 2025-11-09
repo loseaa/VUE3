@@ -8,17 +8,24 @@
 	<body>
 		<div id="app"></div>
 		<script type="module">
-			import { reactive, effect } from './reactive.js';
-			let obj = reactive({ name: 'zhangsan', age: 20,flag:true,pos:{
-				x:10,
-				y:20
-			}});
-			let runner =effect(() => {
-				document.getElementById('app').innerHTML = `pos: ${obj.pos.x},${obj.pos.y} `;
+			import { reactive, effect,ref,toRef,toRefs,computed } from './reactive.js';
+			let num=ref({
+				x:1,
+				y:2
+			});
+			let p=computed(()=>{
+				console.log("computed---");
+				return num.value.x+",,"+num.value.y;
+			})
+
+			effect(() => {
+				document.getElementById('app').innerHTML = `<h1>${p.value}</h1><h1>${p.value}</h1>`;
+
 			});
 
 			setTimeout(() => {
-				obj.pos.x++;
+				num.value.x = 10;
+				num.value.y = 20000
 			}, 1000);
 
 		</script>
