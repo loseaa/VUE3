@@ -54,6 +54,14 @@ export class ReactiveEffect {
 		activeEffect = lastEffect;
 		return result;
 	}
+	stop() {
+		if (this.active) {
+			this.active = false;
+			// 清理依赖
+			preEffectClean(this);
+			postCleanEffect(this);
+		}
+	}
 }
 
 function cleanEffectDeps(effect: ReactiveEffect, dep: Map<ReactiveEffect, number>) {

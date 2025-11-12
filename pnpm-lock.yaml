@@ -30,6 +30,21 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
+  packages/runtime-core:
+    dependencies:
+      '@vue3/shared':
+        specifier: workspace:*
+        version: link:../shared
+
+  packages/runtime-dom:
+    dependencies:
+      '@vue3/runtime-core':
+        specifier: workspace:*
+        version: link:../runtime-core
+      '@vue3/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/shared: {}
 
 packages:

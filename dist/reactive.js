@@ -289,6 +289,49 @@ var ComputedRefImpl = class {
     return this._value;
   }
 };
+
+// packages/reactive/src/watchAPI.ts
+function traverse(value, deep, seen = /* @__PURE__ */ new Set()) {
+  if (value.__v_isRef)
+    return traverse(value.value, deep, seen);
+  if (typeof value !== "object" || value === null || seen.has(value)) {
+    return value;
+  }
+  seen.add(value);
+  if (!deep) {
+    for (const key in value) {
+      value[key];
+    }
+  }
+  for (const key in value) {
+    traverse(value[key], deep, seen);
+  }
+  return value;
+}
+function watch(state, cb, options) {
+  let getter;
+  if (typeof state === "function") {
+    getter = state;
+  } else {
+    getter = () => traverse(state, options?.deep);
+  }
+  let effect2 = new ReactiveEffect(getter, () => {
+    const newValue = effect2.run();
+    cb(newValue, oldValue);
+    oldValue = newValue;
+  });
+  let oldValue = effect2.run();
+  if (options?.immediate) {
+    cb(oldValue, void 0);
+    oldValue = getter();
+  }
+}
+function watchEffect(cb, options) {
+  let effect2 = new ReactiveEffect(cb, () => {
+    cb();
+  });
+  effect2.run();
+}
 export {
   computed,
   effect,
@@ -296,6 +339,8 @@ export {
   reactive,
   ref,
   toRef,
-  toRefs
+  toRefs,
+  watch,
+  watchEffect
 };
 //# sourceMappingURL=reactive.js.map

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script type="module">
+			import { ref, reactive, effect, watch, watchEffect } from './reactive.js';
+			let num = reactive({
+				x: 1,
+				y: 2,
+			});
+			console.log(num);
+			// watch(()=>{
+			// 	return num.x+num.y;
+			// },(newVal,oldVal)=>{
+			//     console.log("num changed:",newVal,oldVal);
+			// },{immediate:true,deep:true});
+			watchEffect(
+				() => {
+					console.log('watchEffect:', num.x + num.y);
+				},
+				{ immediate: true }
+			);
+
+			setTimeout(() => {
+				num.x = 10;
+			}, 1000);
+
+			setTimeout(() => {
+				num.x = 111;
+				num.y = 222;
+			}, 2000);
+		</script>
+	</body>
+</html>

@@ -8,7 +8,7 @@
 	<body>
 		<div id="app"></div>
 		<script type="module">
-			import { reactive, effect,ref,toRef,toRefs,computed } from './reactive.js';
+			import { reactive, effect,ref,toRef,toRefs,computed,watch,watchEffect } from './reactive.js';
 			let num=ref({
 				x:1,
 				y:2
@@ -27,6 +27,11 @@
 				num.value.x = 10;
 				num.value.y = 20000
 			}, 1000);
+
+			setTimeout(() => {
+				num.value.x = 111;
+				num.value.y = 222
+			}, 2000);
 
 		</script>
 	</body>
