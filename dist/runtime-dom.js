@@ -82,6 +82,11 @@ function patchProp(el, key, prevValue, nextValue) {
   }
 }
 
+// packages/shared/src/utils.ts
+function isString(value) {
+  return typeof value === "string";
+}
+
 // packages/runtime-core/src/createRenderer.ts
 function createRenderer(options) {
   const {
@@ -95,14 +100,21 @@ function createRenderer(options) {
     nextSibling: hostNextSibling,
     patchProp: hostPatchProp
   } = options;
-  function mountChildren(child, container) {
-    if (child.shapeFlags & 1 /* ELEMENT */) {
-      patch(null, child, container);
+  function mountChildren(children, container) {
+    for (let i = 0; i < children.length; i++) {
+      patch(null, children[i], container);
     }
   }
   function mountElement(vnode, container) {
     const { type, children, props, shapeFlag } = vnode;
+    if (type === "text") {
+      const el2 = hostCreateText(children);
+      vnode.el = el2;
+      hostInsert(el2, container);
+      return el2;
+    }
     const el = hostCreateElement(type);
+    vnode.el = el;
     if (props) {
       for (let key in props) {
         console.log(key, props[key]);
@@ -110,22 +122,117 @@ function createRenderer(options) {
       }
     }
     if (shapeFlag & 8 /* TEXT_CHILDREN */) {
-      hostSetElementText(el, children);
+      mountElement(children, el);
     } else if (shapeFlag & 16 /* ARRAY_CHILDREN */) {
-      children.forEach((child) => {
-        mountChildren(child, el);
-      });
+      mountChildren(children, el);
     }
     hostInsert(el, container);
   }
+  function isSameVnodeType(oldVnode, vnode) {
+    return oldVnode && vnode && oldVnode.type === vnode.type && oldVnode.key === vnode.key;
+  }
   function patch(oldVnode, vnode, container) {
+    if (vnode === oldVnode) {
+      return;
+    }
+    if (!vnode) {
+      return hostRemove(oldVnode.el);
+    }
     if (!oldVnode) {
-      mountElement(vnode, container);
+      if (vnode.shapeFlag & 1 /* ELEMENT */) {
+        return mountElement(vnode, container);
+      }
+    }
+    if (!isSameVnodeType(oldVnode, vnode)) {
+      if (oldVnode) unmount(oldVnode);
+      return mountElement(vnode, container);
     } else {
+      patchElement(oldVnode, vnode);
     }
   }
+  function patchProps(oldNode, vNode, el) {
+    const oldProps = oldNode.props || {};
+    const newProps = vNode.props || {};
+    for (let key in newProps) {
+      if (newProps[key] !== oldProps[key]) {
+        hostPatchProp(el, key, oldProps[key], newProps[key]);
+      }
+    }
+    for (let key in oldProps) {
+      if (!(key in newProps)) {
+        hostPatchProp(el, key, oldProps[key], null);
+      }
+    }
+  }
+  function unmount(vNode) {
+    hostRemove(vNode.el);
+  }
+  function unmountChildren(oldVnode, container) {
+    for (let i = 0; i < oldVnode.children.length; i++) {
+      unmount(oldVnode.children[i]);
+    }
+  }
+  function patchKeyChildren(oldChildren, newChildren, el) {
+    let i = 0;
+    let e1 = oldChildren.length - 1;
+    let e2 = newChildren.length - 1;
+    while (i <= e1 && i <= e2) {
+      if (isSameVnodeType(oldChildren[i], newChildren[i])) {
+        patch(oldChildren[i], newChildren[i], el);
+      } else {
+        break;
+      }
+      i++;
+    }
+    while (i <= e1 && i <= e2) {
+      if (isSameVnodeType(oldChildren[e1], newChildren[e2])) {
+        patch(oldChildren[e1], newChildren[e2], el);
+      } else {
+        break;
+      }
+      e1--;
+      e2--;
+    }
+    if (i > e1) {
+      for (let j = i; j <= e2; j++) {
+        patch(null, newChildren[j], el);
+      }
+    } else if (i > e2) {
+      for (let j = i; j <= e1; j++) {
+        patch(oldChildren[j], null, el);
+      }
+    }
+  }
+  function patchChildren(oldVnode, vNode, el) {
+    const oldChildren = oldVnode.children || [];
+    const newChildren = vNode.children || [];
+    if (vNode.shapeFlag & 8 /* TEXT_CHILDREN */) {
+      if (oldVnode.shapeFlag & 16 /* ARRAY_CHILDREN */) {
+        unmountChildren(oldVnode, el);
+      }
+      if (oldChildren !== newChildren) {
+        hostSetElementText(el, newChildren.children);
+      }
+    } else if (vNode.shapeFlag & 16 /* ARRAY_CHILDREN */) {
+      if (oldVnode.shapeFlag & 8 /* TEXT_CHILDREN */) {
+        hostRemove(oldVnode.children.el);
+        mountChildren(newChildren, el);
+      } else if (oldVnode.shapeFlag & 16 /* ARRAY_CHILDREN */) {
+        patchKeyChildren(oldChildren, newChildren, el);
+      } else {
+        mountChildren(newChildren, el);
+      }
+    } else {
+      debugger;
+      hostRemove(oldVnode.children.el);
+    }
+  }
+  function patchElement(oldVnode, vnode) {
+    const el = vnode.el = oldVnode.el;
+    patchProps(oldVnode, vnode, el);
+    patchChildren(oldVnode, vnode, el);
+  }
   let render2 = (vnode, container) => {
-    debugger;
     if (container._node) {
       patch(container._node, vnode, container);
     } else {
@@ -138,11 +245,6 @@ function createRenderer(options) {
   };
 }
 
-// packages/shared/src/utils.ts
-function isString(value) {
-  return typeof value === "string";
-}
-
 // packages/runtime-core/src/h.ts
 function h(type, propsOrChildren, children) {
   let l = arguments.length;
@@ -153,13 +255,19 @@ function h(type, propsOrChildren, children) {
       if (isString(propsOrChildren)) {
         return createVnode(type, null, propsOrChildren);
       }
+      if (propsOrChildren instanceof Array) {
+        return createVnode(type, null, propsOrChildren);
+      }
       return createVnode(type, null, [propsOrChildren]);
     }
   } else if (l === 3) {
     if (isString(children)) {
       return createVnode(type, propsOrChildren, children);
     }
-    return createVnode(type, propsOrChildren, [children]);
+    if (children && !(children instanceof Array)) {
+      children = [children];
+    }
+    return createVnode(type, propsOrChildren, children);
   } else {
     let children2 = [];
     for (let i = 2; i < l; i++) {
@@ -168,12 +276,41 @@ function h(type, propsOrChildren, children) {
     return createVnode(type, propsOrChildren, children2);
   }
 }
+function createTextVNode(text) {
+  return {
+    type: "text",
+    children: text,
+    el: null
+    // 在挂载时才会设置
+  };
+}
 function createVnode(type, props, children) {
+  let shapeFlag = isString(type) ? 1 /* ELEMENT */ : 4 /* STATEFUL_COMPONENT */;
+  if (children) {
+    if (isString(children)) {
+      shapeFlag |= 8 /* TEXT_CHILDREN */;
+    } else if (children instanceof Array) {
+      shapeFlag |= 16 /* ARRAY_CHILDREN */;
+    }
+  }
+  if (children && isString(children)) {
+    children = createTextVNode(children);
+  }
+  if (children) {
+    for (let i = 0; i < children.length; i++) {
+      if (isString(children[i])) {
+        children[i] = createTextVNode(children[i]);
+      }
+    }
+  }
   return {
     __v_isVnode: true,
     type,
     props,
-    children
+    children,
+    key: props?.key,
+    shapeFlag,
+    el: null
   };
 }
 

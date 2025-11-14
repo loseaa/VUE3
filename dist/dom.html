@@ -1,23 +1,33 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-   
-</head>
-<body>
-    <div id="app"></div>
-    <script type="module">
-        import {renderOption,h} from './runtime-dom.js';
-        // import { } from 'https://cdn.bootcdn.net/ajax/libs/vue/3.5.22/vue.esm-browser.min.js';
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script type="module">
+			import { h, render } from './runtime-dom.js';
+			// import { } from 'https://cdn.bootcdn.net/ajax/libs/vue/3.5.22/vue.esm-browser.min.js';
 
-        // const renderer = createRenderer(renderOption);
-        const vnode = h('div', {style:{color:'red'}} , ['Hello World',h('span',null,'Vue3')]);
-            console.log(vnode);
-        
-        
-    </script>
-    
-</body>
+			const vnode1 = h('div', {}, [
+				h('div', { key: 'a' }, 'a'),
+				h('div', { key: 'b' }, 'b'),
+				h('div', { key: 'c' }, 'c'),
+				h('div', { key: 'd' }, 'd'),
+			]);
+			const vnode2 = h('div', {}, [
+				h('div', { key: 'a' }, 'a'),
+				h('div', { key: 'b' }, 'b'),
+				// h('div', { style: { color: 'red' }, key: 'c' }, 'c'),
+				h('div', { key: 'd' }, 'd'),
+			]);
+			console.log(vnode2);
+			render(vnode1, document.getElementById('app'));
+			setTimeout(() => {
+				render(vnode2, document.getElementById('app'));
+			}, 3000);
+		</script>
+	</body>
 </html>
