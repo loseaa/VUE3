@@ -16,12 +16,20 @@
 				h('div', { key: 'b' }, 'b'),
 				h('div', { key: 'c' }, 'c'),
 				h('div', { key: 'd' }, 'd'),
+				h('div', { key: 'e' }, 'e'),
+				h('div', { key: 'x' }, 'x'),
+				h('div', { key: 'f' }, 'f'),
+				h('div', { key: 'g' }, 'g'),
 			]);
 			const vnode2 = h('div', {}, [
 				h('div', { key: 'a' }, 'a'),
 				h('div', { key: 'b' }, 'b'),
-				// h('div', { style: { color: 'red' }, key: 'c' }, 'c'),
+				h('div', { key: 'e' }, 'e'),
+				h('div', { key: 'c' }, 'c'),
 				h('div', { key: 'd' }, 'd'),
+				h('div', { key: 'q' }, 'q'),
+				h('div', { key: 'f' }, 'f'),
+				h('div', { key: 'g' }, 'g'),
 			]);
 			console.log(vnode2);
 			render(vnode1, document.getElementById('app'));

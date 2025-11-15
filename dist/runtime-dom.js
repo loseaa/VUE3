@@ -87,6 +87,49 @@ function isString(value) {
   return typeof value === "string";
 }
 
+// packages/runtime-core/src/getLIS.ts
+function getLIS(arr) {
+  let res = [0];
+  let parents = [void 0];
+  for (let i = 1; i < arr.length; i++) {
+    let val = arr[i];
+    if (val != void 0 && val > -1) {
+      let lastOldVal = arr[res[res.length - 1]];
+      if (lastOldVal !== void 0) {
+        if (val > lastOldVal) {
+          parents[i] = res[res.length - 1];
+          res.push(i);
+        } else {
+          let target;
+          let l = 0;
+          let r2 = res.length - 1;
+          while (l <= r2) {
+            let mid = (l + r2) / 2 | 0;
+            let _val = arr[res[mid]];
+            if (_val !== void 0 && val > _val) {
+              l = mid + 1;
+            } else {
+              target = mid;
+              r2 = mid - 1;
+            }
+          }
+          parents[i] = parents[res[target]];
+          res[target] = i;
+        }
+      }
+    }
+  }
+  let r = [res[res.length - 1]];
+  while (true) {
+    if (r[0] == void 0 || parents[r[0]] == void 0) {
+      break;
+    } else {
+      r.unshift(parents[r[0]]);
+    }
+  }
+  return r;
+}
+
 // packages/runtime-core/src/createRenderer.ts
 function createRenderer(options) {
   const {
@@ -105,19 +148,18 @@ function createRenderer(options) {
       patch(null, children[i], container);
     }
   }
-  function mountElement(vnode, container) {
+  function mountElement(vnode, container, anchor) {
     const { type, children, props, shapeFlag } = vnode;
     if (type === "text") {
       const el2 = hostCreateText(children);
       vnode.el = el2;
-      hostInsert(el2, container);
+      hostInsert(el2, container, anchor);
       return el2;
     }
     const el = hostCreateElement(type);
     vnode.el = el;
     if (props) {
       for (let key in props) {
-        console.log(key, props[key]);
         hostPatchProp(el, key, null, props[key]);
       }
     }
@@ -126,12 +168,12 @@ function createRenderer(options) {
     } else if (shapeFlag & 16 /* ARRAY_CHILDREN */) {
       mountChildren(children, el);
     }
-    hostInsert(el, container);
+    hostInsert(el, container, anchor);
   }
   function isSameVnodeType(oldVnode, vnode) {
     return oldVnode && vnode && oldVnode.type === vnode.type && oldVnode.key === vnode.key;
   }
-  function patch(oldVnode, vnode, container) {
+  function patch(oldVnode, vnode, container, anchor) {
     if (vnode === oldVnode) {
       return;
     }
@@ -140,12 +182,12 @@ function createRenderer(options) {
     }
     if (!oldVnode) {
       if (vnode.shapeFlag & 1 /* ELEMENT */) {
-        return mountElement(vnode, container);
+        return mountElement(vnode, container, anchor);
       }
     }
     if (!isSameVnodeType(oldVnode, vnode)) {
       if (oldVnode) unmount(oldVnode);
-      return mountElement(vnode, container);
+      return mountElement(vnode, container, anchor);
     } else {
       patchElement(oldVnode, vnode);
     }
@@ -194,12 +236,61 @@ function createRenderer(options) {
       e2--;
     }
     if (i > e1) {
-      for (let j = i; j <= e2; j++) {
-        patch(null, newChildren[j], el);
+      if (newChildren[e2 + 1]?.el) {
+        for (let j = i; j <= e2; j++) {
+          patch(null, newChildren[j], el, newChildren[e2 + 1]?.el);
+        }
+      } else {
+        for (let j = i; j <= e2; j++) {
+          patch(null, newChildren[j], el);
+        }
       }
     } else if (i > e2) {
+      debugger;
       for (let j = i; j <= e1; j++) {
-        patch(oldChildren[j], null, el);
+        unmount(oldChildren[j]);
+      }
+    } else {
+      let s1 = i;
+      let s2 = i;
+      let keytoNewIndex = /* @__PURE__ */ new Map();
+      for (let j = s2; j <= e2; j++) {
+        keytoNewIndex.set(newChildren[j].key, j);
+      }
+      for (let j = s1; j <= e1; j++) {
+        if (!keytoNewIndex.has(oldChildren[j].key)) {
+          unmount(oldChildren[j]);
+        } else {
+          let index = keytoNewIndex.get(oldChildren[j].key);
+          patch(oldChildren[j], newChildren[index], el);
+        }
+      }
+      let oldKetToIndex = /* @__PURE__ */ new Map();
+      for (let j = s1; j <= e1; j++) {
+        oldKetToIndex.set(oldChildren[j].key, j - s1);
+      }
+      let newIndexinOldIndex = [];
+      for (let j = s2; j <= e2; j++) {
+        let newKey = newChildren[j].key;
+        if (oldKetToIndex.has(newKey)) {
+          newIndexinOldIndex.push(oldKetToIndex.get(newKey));
+        } else {
+          newIndexinOldIndex.push(-1);
+        }
+      }
+      let lis = getLIS(newIndexinOldIndex);
+      let l = lis.length - 1;
+      for (let j = e2; j >= s2; j--) {
+        let anchor = newChildren[j + 1].el;
+        if (j === lis[l]) {
+          l--;
+        } else {
+          if (!newChildren[j].el) {
+            patch(null, newChildren[j], el, anchor);
+          } else {
+            hostInsert(newChildren[j].el, el, anchor);
+          }
+        }
       }
     }
   }
