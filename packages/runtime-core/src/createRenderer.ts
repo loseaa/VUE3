@@ -2,6 +2,7 @@ import { isString } from '@vue3/shared';
 import { ShapeFlags } from './shapeFlags.js';
 import { getLIS } from './getLIS.js';
 
+export const Fragment=Symbol("Fragment")
 
 export function createRenderer(options: any) {
 	const {
@@ -52,6 +53,15 @@ export function createRenderer(options: any) {
 		return oldVnode && vnode && oldVnode.type === vnode.type && oldVnode.key === vnode.key;
 	}
 
+	function processFragment(oldVnode: any, vnode: any, container: any, anchor?: any){
+		if(!oldVnode){
+			mountChildren(vnode.children,container)
+		}else{
+			patchChildren(oldVnode,vnode,container)
+		}
+	}
+
+
 	function patch(oldVnode: any, vnode: any, container: any, anchor?: any) {
 		if (vnode === oldVnode) {
 			return;
@@ -63,6 +73,10 @@ export function createRenderer(options: any) {
 			if (vnode.shapeFlag & ShapeFlags.ELEMENT) {
 				return mountElement(vnode, container, anchor);
 			}
+		}
+		if(vnode.type===Fragment){
+			processFragment(oldVnode, vnode, container, anchor	)
+			return 
 		}
 		if (!isSameVnodeType(oldVnode, vnode)) {
 			if (oldVnode) unmount(oldVnode);
@@ -131,7 +145,6 @@ export function createRenderer(options: any) {
 				}
 			}
 		} else if (i > e2) {
-			debugger;
 			for (let j = i; j <= e1; j++) {
 				unmount(oldChildren[j]);
 			}
@@ -140,6 +153,7 @@ export function createRenderer(options: any) {
 			let s2 = i;
 			let keytoNewIndex = new Map();
 			for (let j = s2; j <= e2; j++) {
+				if(newChildren[j].key)
 				keytoNewIndex.set(newChildren[j].key, j);
 			}
 			// console.log(keytoNewIndex);
@@ -190,7 +204,7 @@ export function createRenderer(options: any) {
 			let l = lis.length - 1;
 			// 倒序更新
 			for (let j = e2; j >= s2; j--) {
-				let anchor = newChildren[j + 1].el;
+				let anchor = newChildren[j + 1]?.el;
 				if (j === lis[l]) {
 					l--;
 				} else {
@@ -227,7 +241,6 @@ export function createRenderer(options: any) {
 				mountChildren(newChildren, el);
 			}
 		} else {
-			debugger;
 			hostRemove(oldVnode.children.el);
 		}
 	}

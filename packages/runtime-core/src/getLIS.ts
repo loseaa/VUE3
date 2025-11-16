@@ -34,6 +34,7 @@ export function getLIS(arr: Array<number>) {
 			}
 		}
 	}
+	if(res.length===1)return []
     let r=[res[res.length-1]]
     while(true){
         if(r[0]==undefined||parents[r[0]]==undefined){

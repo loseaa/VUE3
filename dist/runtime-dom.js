@@ -119,6 +119,7 @@ function getLIS(arr) {
       }
     }
   }
+  if (res.length === 1) return [];
   let r = [res[res.length - 1]];
   while (true) {
     if (r[0] == void 0 || parents[r[0]] == void 0) {
@@ -131,6 +132,7 @@ function getLIS(arr) {
 }
 
 // packages/runtime-core/src/createRenderer.ts
+var Fragment = Symbol("Fragment");
 function createRenderer(options) {
   const {
     createElement: hostCreateElement,
@@ -173,6 +175,13 @@ function createRenderer(options) {
   function isSameVnodeType(oldVnode, vnode) {
     return oldVnode && vnode && oldVnode.type === vnode.type && oldVnode.key === vnode.key;
   }
+  function processFragment(oldVnode, vnode, container, anchor) {
+    if (!oldVnode) {
+      mountChildren(vnode.children, container);
+    } else {
+      patchChildren(oldVnode, vnode, container);
+    }
+  }
   function patch(oldVnode, vnode, container, anchor) {
     if (vnode === oldVnode) {
       return;
@@ -184,6 +193,10 @@ function createRenderer(options) {
       if (vnode.shapeFlag & 1 /* ELEMENT */) {
         return mountElement(vnode, container, anchor);
       }
+    }
+    if (vnode.type === Fragment) {
+      processFragment(oldVnode, vnode, container, anchor);
+      return;
     }
     if (!isSameVnodeType(oldVnode, vnode)) {
       if (oldVnode) unmount(oldVnode);
@@ -246,7 +259,6 @@ function createRenderer(options) {
         }
       }
     } else if (i > e2) {
-      debugger;
       for (let j = i; j <= e1; j++) {
         unmount(oldChildren[j]);
       }
@@ -255,7 +267,8 @@ function createRenderer(options) {
       let s2 = i;
       let keytoNewIndex = /* @__PURE__ */ new Map();
       for (let j = s2; j <= e2; j++) {
-        keytoNewIndex.set(newChildren[j].key, j);
+        if (newChildren[j].key)
+          keytoNewIndex.set(newChildren[j].key, j);
       }
       for (let j = s1; j <= e1; j++) {
         if (!keytoNewIndex.has(oldChildren[j].key)) {
@@ -281,7 +294,7 @@ function createRenderer(options) {
       let lis = getLIS(newIndexinOldIndex);
       let l = lis.length - 1;
       for (let j = e2; j >= s2; j--) {
-        let anchor = newChildren[j + 1].el;
+        let anchor = newChildren[j + 1]?.el;
         if (j === lis[l]) {
           l--;
         } else {
@@ -314,7 +327,6 @@ function createRenderer(options) {
         mountChildren(newChildren, el);
       }
     } else {
-      debugger;
       hostRemove(oldVnode.children.el);
     }
   }
@@ -412,6 +424,7 @@ var render = (vnode, container) => {
 };
 console.log(render);
 export {
+  Fragment,
   h,
   render,
   renderOption

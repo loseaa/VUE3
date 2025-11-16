@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script type="module">
+			import { h, render,Fragment } from './runtime-dom.js';
+			// import { } from 'https://cdn.bootcdn.net/ajax/libs/vue/3.5.22/vue.esm-browser.min.js';
+
+			const vnode1 = h(Fragment, [h("div",{},"asdafafsa"),h("div",{},"VUE")]);
+			const vnode2 = h(Fragment, {}, [h("span","asdawa")]);
+
+			render(vnode1, document.getElementById('app'));
+			setTimeout(() => {
+				render(vnode2, document.getElementById('app'));
+			}, 3000);
+		</script>
+	</body>
+</html>
