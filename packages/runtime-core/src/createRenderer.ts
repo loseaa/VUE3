@@ -1,8 +1,11 @@
 import { isString } from '@vue3/shared';
 import { ShapeFlags } from './shapeFlags.js';
 import { getLIS } from './getLIS.js';
+import { reactive } from '../../reactive/index.js';
+import { ReactiveEffect } from '../../reactive/src/effect.js';
+import { queueJob } from './schedule.js';
 
-export const Fragment=Symbol("Fragment")
+export const Fragment = Symbol('Fragment');
 
 export function createRenderer(options: any) {
 	const {
@@ -53,14 +56,13 @@ export function createRenderer(options: any) {
 		return oldVnode && vnode && oldVnode.type === vnode.type && oldVnode.key === vnode.key;
 	}
 
-	function processFragment(oldVnode: any, vnode: any, container: any, anchor?: any){
-		if(!oldVnode){
-			mountChildren(vnode.children,container)
-		}else{
-			patchChildren(oldVnode,vnode,container)
+	function processFragment(oldVnode: any, vnode: any, container: any, anchor?: any) {
+		if (!oldVnode) {
+			mountChildren(vnode.children, container);
+		} else {
+			patchChildren(oldVnode, vnode, container);
 		}
 	}
-
 
 	function patch(oldVnode: any, vnode: any, container: any, anchor?: any) {
 		if (vnode === oldVnode) {
@@ -74,16 +76,62 @@ export function createRenderer(options: any) {
 				return mountElement(vnode, container, anchor);
 			}
 		}
-		if(vnode.type===Fragment){
-			processFragment(oldVnode, vnode, container, anchor	)
-			return 
+		if (vnode.type === Fragment) {
+			processFragment(oldVnode, vnode, container, anchor);
+			return;
 		}
-		if (!isSameVnodeType(oldVnode, vnode)) {
-			if (oldVnode) unmount(oldVnode);
-			return mountElement(vnode, container, anchor);
+		if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
+			processComponents(oldVnode, vnode, container, anchor);
 		} else {
-			patchElement(oldVnode, vnode);
+			if (!isSameVnodeType(oldVnode, vnode)) {
+				if (oldVnode) unmount(oldVnode);
+				return mountElement(vnode, container, anchor);
+			} else {
+				patchElement(oldVnode, vnode);
+			}
 		}
+	}
+
+	function processComponents(oldVnode: any, vnode: any, container: any, anchor?: any) {
+		if (!oldVnode) {
+			// 首次挂载
+			mountComponent(vnode, container, anchor);
+		}
+	}
+
+	function mountComponent(vnode: any, container: any, anchor?: any) {
+		const { render, data = () => {} } = vnode.type;
+		const state = reactive(data());
+		console.log(state);
+		
+		const instance = {
+			state,
+			vnode,
+			isMounted: false,
+			update: null,
+			subTree: null,
+		};
+
+		const componentUpdateFn = () => {
+			if (!instance.isMounted) {
+				const subTree = render.call(state, state);
+				instance.subTree = subTree;
+				patch(null, subTree, container, anchor);
+				instance.isMounted = true;
+			}else{
+				const subTree = render.call(state, state);
+				patch(instance.subTree,subTree,container,anchor)
+			}
+		};
+
+		const effect = new ReactiveEffect(componentUpdateFn, () => {
+			queueJob(update);
+		});
+		const update = () => {
+			effect.run();
+		};
+		(instance.update as any)=update
+		update();
 	}
 
 	function patchProps(oldNode: any, vNode: any, el: HTMLElement) {
@@ -153,8 +201,7 @@ export function createRenderer(options: any) {
 			let s2 = i;
 			let keytoNewIndex = new Map();
 			for (let j = s2; j <= e2; j++) {
-				if(newChildren[j].key)
-				keytoNewIndex.set(newChildren[j].key, j);
+				if (newChildren[j].key) keytoNewIndex.set(newChildren[j].key, j);
 			}
 			// console.log(keytoNewIndex);
 			// 删掉在老的中存在但是新的不存在的节点
@@ -209,7 +256,7 @@ export function createRenderer(options: any) {
 					l--;
 				} else {
 					if (!newChildren[j].el) {
-						patch(null,newChildren[j],el,anchor);
+						patch(null, newChildren[j], el, anchor);
 					} else {
 						hostInsert(newChildren[j].el, el, anchor);
 					}

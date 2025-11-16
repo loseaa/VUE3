@@ -1,4 +1,4 @@
-import { isString } from "@vue3/shared";
+import { isObject, isString } from "@vue3/shared";
 import { ShapeFlags } from "./shapeFlags.js";
 
 export function h(type: string, propsOrChildren?: any, children?: any) {
@@ -41,7 +41,7 @@ function createTextVNode(text:string) {
 }
 
 function createVnode(type: string, props: any, children: any) {
-	 let shapeFlag = isString(type) ? ShapeFlags.ELEMENT : ShapeFlags.STATEFUL_COMPONENT;
+	 let shapeFlag = isString(type) ? ShapeFlags.ELEMENT :isObject(type)? ShapeFlags.STATEFUL_COMPONENT:0;
 
 	 if(children){
         if(isString(children)){

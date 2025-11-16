@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script type="module">
+			import { h, render } from './runtime-dom.js';
+			// import { } from 'https://cdn.bootcdn.net/ajax/libs/vue/3.5.22/vue.esm-browser.min.js';
+
+            let vueComponent={
+                data:()=>{
+                    return {
+                        name:"jack",
+                        age:10
+                    }
+                },
+                // 注意这里的render不能写成箭头函数，
+                // 不然无法为其绑定this
+                render(){
+                    setTimeout(() => {
+                        this.age++
+                        this.age++
+                    }, 1000);
+                    return h("div",{},[h("span","opopopo"+this.name),h("span","VUE"+this.age)])
+                }
+            }
+
+            render(h(vueComponent),app)
+		</script>
+	</body>
+</html>
