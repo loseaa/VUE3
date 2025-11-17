@@ -9,3 +9,8 @@ export function isFunction(value: any): value is Function {
 export function isString(value: any): value is string {
     return typeof value === 'string';
 }
+
+let oldHasOwn=Object.prototype.hasOwnProperty
+export function hasOwn(target:any,key:any){
+    return oldHasOwn.call(target,key)
+}

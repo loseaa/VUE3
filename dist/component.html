@@ -21,15 +21,15 @@
                 // 注意这里的render不能写成箭头函数，
                 // 不然无法为其绑定this
                 render(){
-                    setTimeout(() => {
-                        this.age++
-                        this.age++
-                    }, 1000);
                     return h("div",{},[h("span","opopopo"+this.name),h("span","VUE"+this.age)])
+                },
+                props:{
+                    name:String,
+                    age:Number
                 }
             }
 
-            render(h(vueComponent),app)
+            render(h(vueComponent,{x:1,y:2,name:"sxy",age:12}),app)
 		</script>
 	</body>
 </html>

@@ -9,30 +9,15 @@
 		<div id="app"></div>
 		<script type="module">
 			import { reactive, effect,ref,toRef,toRefs,computed,watch,watchEffect } from './reactive.js';
-			let num=ref({
-				x:1,
-				y:2
-			});
-			let p=computed(()=>{
-				console.log("computed---");
-				return num.value.x+",,"+num.value.y;
+			let arr=[1,2,3,4]
+
+			let arrReactive=reactive(arr)
+			effect(()=>{
+				document.getElementById("app").innerHTML=arrReactive[0]
 			})
-
-			effect(() => {
-				document.getElementById('app').innerHTML = `<h1>${p.value}</h1><h1>${p.value}</h1>`;
-
-			});
-
 			setTimeout(() => {
-				num.value.x = 10;
-				num.value.y = 20000
+				arrReactive[0]=10000
 			}, 1000);
-
-			setTimeout(() => {
-				num.value.x = 111;
-				num.value.y = 222
-			}, 2000);
-
 		</script>
 	</body>
 </html>

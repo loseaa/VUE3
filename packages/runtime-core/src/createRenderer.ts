@@ -4,6 +4,7 @@ import { getLIS } from './getLIS.js';
 import { reactive } from '../../reactive/index.js';
 import { ReactiveEffect } from '../../reactive/src/effect.js';
 import { queueJob } from './schedule.js';
+import { hasOwn } from '@vue3/shared/src/utils.js';
 
 export const Fragment = Symbol('Fragment');
 
@@ -99,28 +100,77 @@ export function createRenderer(options: any) {
 		}
 	}
 
+	function getPropsAndAttrs(props: any, all: any, instance: any) {
+		let attrs: {
+			[key: string]: any;
+		} = {};
+		let newProps: {
+			[key: string]: any;
+		} = {};
+		for (let key in all) {
+			if (!hasOwn(props, key)) {
+				attrs[key] = all[key];
+			}else{
+				newProps[key]=all[key]
+			}
+		}
+		instance.attrs = attrs;
+		instance.props = reactive(newProps);
+	}
+
 	function mountComponent(vnode: any, container: any, anchor?: any) {
-		const { render, data = () => {} } = vnode.type;
+		const { render, data = () => {}, props } = vnode.type;
 		const state = reactive(data());
-		console.log(state);
-		
+
 		const instance = {
 			state,
 			vnode,
 			isMounted: false,
 			update: null,
 			subTree: null,
+			props: null,
+			attrs: null,
+			proxy: {},
 		};
+
+		getPropsAndAttrs(props, vnode.props, instance);
+
+		instance.proxy = new Proxy(instance, {
+			get(target, key) {
+				const { state, props } = target;
+
+				if (state && hasOwn(state, key)) {
+					return state[key];
+				}
+				if (props && hasOwn(props, key)) {
+	
+					return props[key];
+				}
+			},
+			set(target, key, newValue) {
+				const { state, props } = target;
+				if (state && hasOwn(state, key)) {
+					state[key] = newValue;
+					return true
+				}
+				if (props && hasOwn(props, key)) {
+					console.warn('props are readOnly');
+					return true;
+				}
+				return true;
+			},
+		});
+
 
 		const componentUpdateFn = () => {
 			if (!instance.isMounted) {
-				const subTree = render.call(state, state);
+				const subTree = render.call(instance.proxy, instance.proxy);
 				instance.subTree = subTree;
 				patch(null, subTree, container, anchor);
 				instance.isMounted = true;
-			}else{
-				const subTree = render.call(state, state);
-				patch(instance.subTree,subTree,container,anchor)
+			} else {
+				const subTree = render.call(instance.proxy, instance.proxy);
+				patch(instance.subTree, subTree, container, anchor);
 			}
 		};
 
@@ -130,7 +180,7 @@ export function createRenderer(options: any) {
 		const update = () => {
 			effect.run();
 		};
-		(instance.update as any)=update
+		(instance.update as any) = update;
 		update();
 	}
 

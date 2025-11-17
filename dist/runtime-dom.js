@@ -89,6 +89,10 @@ function isObject(value) {
 function isString(value) {
   return typeof value === "string";
 }
+var oldHasOwn = Object.prototype.hasOwnProperty;
+function hasOwn(target, key) {
+  return oldHasOwn.call(target, key);
+}
 
 // packages/runtime-core/src/getLIS.ts
 function getLIS(arr) {
@@ -390,26 +394,65 @@ function createRenderer(options) {
       mountComponent(vnode, container, anchor);
     }
   }
+  function getPropsAndAttrs(props, all, instance) {
+    let attrs = {};
+    let newProps = {};
+    for (let key in all) {
+      if (!hasOwn(props, key)) {
+        attrs[key] = all[key];
+      } else {
+        newProps[key] = all[key];
+      }
+    }
+    instance.attrs = attrs;
+    instance.props = reactive(newProps);
+  }
   function mountComponent(vnode, container, anchor) {
     const { render: render3, data = () => {
-    } } = vnode.type;
+    }, props } = vnode.type;
     const state = reactive(data());
-    console.log(state);
     const instance = {
       state,
       vnode,
       isMounted: false,
       update: null,
-      subTree: null
+      subTree: null,
+      props: null,
+      attrs: null,
+      proxy: {}
     };
+    getPropsAndAttrs(props, vnode.props, instance);
+    instance.proxy = new Proxy(instance, {
+      get(target, key) {
+        const { state: state2, props: props2 } = target;
+        if (state2 && hasOwn(state2, key)) {
+          return state2[key];
+        }
+        if (props2 && hasOwn(props2, key)) {
+          return props2[key];
+        }
+      },
+      set(target, key, newValue) {
+        const { state: state2, props: props2 } = target;
+        if (state2 && hasOwn(state2, key)) {
+          state2[key] = newValue;
+          return true;
+        }
+        if (props2 && hasOwn(props2, key)) {
+          console.warn("props are readOnly");
+          return true;
+        }
+        return true;
+      }
+    });
     const componentUpdateFn = () => {
       if (!instance.isMounted) {
-        const subTree = render3.call(state, state);
+        const subTree = render3.call(instance.proxy, instance.proxy);
         instance.subTree = subTree;
         patch(null, subTree, container, anchor);
         instance.isMounted = true;
       } else {
-        const subTree = render3.call(state, state);
+        const subTree = render3.call(instance.proxy, instance.proxy);
         patch(instance.subTree, subTree, container, anchor);
       }
     };

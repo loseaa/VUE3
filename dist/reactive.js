@@ -57,6 +57,13 @@ var ReactiveEffect = class {
     activeEffect = lastEffect;
     return result;
   }
+  stop() {
+    if (this.active) {
+      this.active = false;
+      preEffectClean(this);
+      postCleanEffect(this);
+    }
+  }
 };
 function cleanEffectDeps(effect2, dep) {
   dep.delete(effect2);
@@ -325,12 +332,20 @@ function watch(state, cb, options) {
     cb(oldValue, void 0);
     oldValue = getter();
   }
+  let unwatch = () => {
+    effect2.stop();
+  };
+  return unwatch;
 }
 function watchEffect(cb, options) {
   let effect2 = new ReactiveEffect(cb, () => {
     cb();
   });
   effect2.run();
+  let unwatch = () => {
+    effect2.stop();
+  };
+  return unwatch;
 }
 export {
   computed,
