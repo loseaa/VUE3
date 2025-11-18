@@ -5,6 +5,7 @@ import { reactive } from '../../reactive/index.js';
 import { ReactiveEffect } from '../../reactive/src/effect.js';
 import { queueJob } from './schedule.js';
 import { hasOwn } from '@vue3/shared/src/utils.js';
+import { creatInstance, setComponentEffct, setProxy } from '../../reactive/src/components.js';
 
 export const Fragment = Symbol('Fragment');
 
@@ -94,10 +95,49 @@ export function createRenderer(options: any) {
 	}
 
 	function processComponents(oldVnode: any, vnode: any, container: any, anchor?: any) {
+		
 		if (!oldVnode) {
 			// 首次挂载
 			mountComponent(vnode, container, anchor);
+		} else {
+			updateComponent(oldVnode, vnode, container, anchor);
 		}
+	}
+
+	function propsHasChanged(oldProps: any, newProps: any) {
+		if (Object.keys(oldProps).length !== Object.keys(newProps).length) return false;
+		for (let key in newProps) {
+			if (newProps[key] !== oldProps[key]) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	function updateProps(vnode: any, oldProps: any, newProps: any) {
+		
+		const instance=vnode.component
+		const props=vnode.props
+		if(propsHasChanged(oldProps,newProps)){
+			// 把所有的新的都更新
+			for(let key in newProps){
+				instance.props[key]=newProps[key]
+			}
+			// 把老的上面新的没有的都删除
+			for(let key in oldProps){
+				if(!hasOwn(newProps,key)){
+					delete instance.props[key]
+					
+				}
+			}
+		}
+	}
+
+	function updateComponent(oldVnode: any, vnode: any, container: any, anchor?: any) {
+		const { props: oldProps } = oldVnode.component;
+		const { props: newProps } = vnode;
+		vnode.component = oldVnode.component;
+		updateProps(vnode,oldProps,newProps);
 	}
 
 	function getPropsAndAttrs(props: any, all: any, instance: any) {
@@ -110,8 +150,8 @@ export function createRenderer(options: any) {
 		for (let key in all) {
 			if (!hasOwn(props, key)) {
 				attrs[key] = all[key];
-			}else{
-				newProps[key]=all[key]
+			} else {
+				newProps[key] = all[key];
 			}
 		}
 		instance.attrs = attrs;
@@ -119,69 +159,18 @@ export function createRenderer(options: any) {
 	}
 
 	function mountComponent(vnode: any, container: any, anchor?: any) {
-		const { render, data = () => {}, props } = vnode.type;
-		const state = reactive(data());
+		const { render, props = {} } = vnode.type;
 
-		const instance = {
-			state,
-			vnode,
-			isMounted: false,
-			update: null,
-			subTree: null,
-			props: null,
-			attrs: null,
-			proxy: {},
-		};
+		// 创建一个组件实例
+		vnode.component = creatInstance(vnode);
+		// 把props 和attrs区分开
+		getPropsAndAttrs(props, vnode.props, vnode.component);
 
-		getPropsAndAttrs(props, vnode.props, instance);
-
-		instance.proxy = new Proxy(instance, {
-			get(target, key) {
-				const { state, props } = target;
-
-				if (state && hasOwn(state, key)) {
-					return state[key];
-				}
-				if (props && hasOwn(props, key)) {
-	
-					return props[key];
-				}
-			},
-			set(target, key, newValue) {
-				const { state, props } = target;
-				if (state && hasOwn(state, key)) {
-					state[key] = newValue;
-					return true
-				}
-				if (props && hasOwn(props, key)) {
-					console.warn('props are readOnly');
-					return true;
-				}
-				return true;
-			},
-		});
-
-
-		const componentUpdateFn = () => {
-			if (!instance.isMounted) {
-				const subTree = render.call(instance.proxy, instance.proxy);
-				instance.subTree = subTree;
-				patch(null, subTree, container, anchor);
-				instance.isMounted = true;
-			} else {
-				const subTree = render.call(instance.proxy, instance.proxy);
-				patch(instance.subTree, subTree, container, anchor);
-			}
-		};
-
-		const effect = new ReactiveEffect(componentUpdateFn, () => {
-			queueJob(update);
-		});
-		const update = () => {
-			effect.run();
-		};
-		(instance.update as any) = update;
-		update();
+		// 创建组件实例的响应式
+		setProxy(vnode.component);
+		vnode.component.render = render;
+		// 组件的activeeffect,数据变化重新渲染
+		setComponentEffct(vnode.component, container, anchor, patch);
 	}
 
 	function patchProps(oldNode: any, vNode: any, el: HTMLElement) {
@@ -349,11 +338,14 @@ export function createRenderer(options: any) {
 	}
 
 	let render = (vnode: any, container: any) => {
+		
 		if (container._node) {
 			patch(container._node, vnode, container);
 		} else {
+			
 			patch(null, vnode, container);
 		}
+		
 		container._node = vnode;
 	};
 	return {

@@ -8,28 +8,48 @@
 	<body>
 		<div id="app"></div>
 		<script type="module">
-			import { h, render } from './runtime-dom.js';
+			import { h, render, Fragment } from './runtime-dom.js';
 			// import { } from 'https://cdn.bootcdn.net/ajax/libs/vue/3.5.22/vue.esm-browser.min.js';
 
-            let vueComponent={
-                data:()=>{
-                    return {
-                        name:"jack",
-                        age:10
-                    }
-                },
-                // 注意这里的render不能写成箭头函数，
-                // 不然无法为其绑定this
-                render(){
-                    return h("div",{},[h("span","opopopo"+this.name),h("span","VUE"+this.age)])
-                },
-                props:{
-                    name:String,
-                    age:Number
-                }
-            }
+			let renderComponent = {
+                // data(){
+                //     return{
 
-            render(h(vueComponent,{x:1,y:2,name:"sxy",age:12}),app)
+                //     }
+                // },
+
+				render() {
+					return h("span",this.city);
+				},
+                props:{
+                    city:String
+                }
+			};
+
+			let vueComponent = {
+				data: () => {
+					return {
+						flag: true,
+					};
+				},
+				render() {
+                    console.log(this);
+                    
+					return h(Fragment, null, [
+						h(
+							'button',
+							{
+								onClick: () => {
+									this.flag = !this.flag;
+								},
+							},
+							'点我'+this.flag
+						),
+						h(renderComponent, { city: this.flag ? '北京' : '上海' }),
+					]);
+				},
+			};
+			render(h(vueComponent), app);
 		</script>
 	</body>
 </html>

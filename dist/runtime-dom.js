@@ -311,6 +311,77 @@ function queueJob(job) {
   }
 }
 
+// packages/reactive/src/components.ts
+function creatInstance(vnode) {
+  const { data = () => ({}) } = vnode.type;
+  return {
+    data: reactive(data()),
+    vnode,
+    isMounted: false,
+    update: null,
+    subTree: null,
+    props: null,
+    attrs: null,
+    proxy: {},
+    render: null
+  };
+}
+var publicProperty = {
+  $attrs: (instance) => instance.attrs
+};
+function setProxy(instance) {
+  instance.proxy = new Proxy(instance, {
+    get(target, key) {
+      const { data, props } = target;
+      console.log(data);
+      if (hasOwn(publicProperty, key)) {
+        return publicProperty[key](target);
+      }
+      if (data && hasOwn(data, key)) {
+        return data[key];
+      }
+      if (props && hasOwn(props, key)) {
+        return props[key];
+      }
+    },
+    set(target, key, newValue) {
+      const { data, props } = target;
+      if (data && hasOwn(data, key)) {
+        data[key] = newValue;
+        return true;
+      }
+      if (props && hasOwn(props, key)) {
+        console.warn("props are readOnly");
+        return true;
+      }
+      return true;
+    }
+  });
+}
+function setComponentEffct(instance, container, anchor, patch) {
+  const componentUpdateFn = () => {
+    const { render: render2 } = instance;
+    if (!instance.isMounted) {
+      const subTree = render2.call(instance.proxy, instance.proxy);
+      instance.subTree = subTree;
+      patch(null, subTree, container, anchor);
+      instance.isMounted = true;
+    } else {
+      const subTree = render2.call(instance.proxy, instance.proxy);
+      patch(instance.subTree, subTree, container, anchor);
+      instance.subTree = subTree;
+    }
+  };
+  const effect2 = new ReactiveEffect(componentUpdateFn, () => {
+    queueJob(update);
+  });
+  const update = () => {
+    effect2.run();
+  };
+  instance.update = update;
+  update();
+}
+
 // packages/runtime-core/src/createRenderer.ts
 var Fragment = Symbol("Fragment");
 function createRenderer(options) {
@@ -392,7 +463,38 @@ function createRenderer(options) {
   function processComponents(oldVnode, vnode, container, anchor) {
     if (!oldVnode) {
       mountComponent(vnode, container, anchor);
+    } else {
+      updateComponent(oldVnode, vnode, container, anchor);
     }
+  }
+  function propsHasChanged(oldProps, newProps) {
+    if (Object.keys(oldProps).length !== Object.keys(newProps).length) return false;
+    for (let key in newProps) {
+      if (newProps[key] !== oldProps[key]) {
+        return true;
+      }
+    }
+    return false;
+  }
+  function updateProps(vnode, oldProps, newProps) {
+    const instance = vnode.component;
+    const props = vnode.props;
+    if (propsHasChanged(oldProps, newProps)) {
+      for (let key in newProps) {
+        instance.props[key] = newProps[key];
+      }
+      for (let key in oldProps) {
+        if (!hasOwn(newProps, key)) {
+          delete instance.props[key];
+        }
+      }
+    }
+  }
+  function updateComponent(oldVnode, vnode, container, anchor) {
+    const { props: oldProps } = oldVnode.component;
+    const { props: newProps } = vnode;
+    vnode.component = oldVnode.component;
+    updateProps(vnode, oldProps, newProps);
   }
   function getPropsAndAttrs(props, all, instance) {
     let attrs = {};
@@ -408,62 +510,12 @@ function createRenderer(options) {
     instance.props = reactive(newProps);
   }
   function mountComponent(vnode, container, anchor) {
-    const { render: render3, data = () => {
-    }, props } = vnode.type;
-    const state = reactive(data());
-    const instance = {
-      state,
-      vnode,
-      isMounted: false,
-      update: null,
-      subTree: null,
-      props: null,
-      attrs: null,
-      proxy: {}
-    };
-    getPropsAndAttrs(props, vnode.props, instance);
-    instance.proxy = new Proxy(instance, {
-      get(target, key) {
-        const { state: state2, props: props2 } = target;
-        if (state2 && hasOwn(state2, key)) {
-          return state2[key];
-        }
-        if (props2 && hasOwn(props2, key)) {
-          return props2[key];
-        }
-      },
-      set(target, key, newValue) {
-        const { state: state2, props: props2 } = target;
-        if (state2 && hasOwn(state2, key)) {
-          state2[key] = newValue;
-          return true;
-        }
-        if (props2 && hasOwn(props2, key)) {
-          console.warn("props are readOnly");
-          return true;
-        }
-        return true;
-      }
-    });
-    const componentUpdateFn = () => {
-      if (!instance.isMounted) {
-        const subTree = render3.call(instance.proxy, instance.proxy);
-        instance.subTree = subTree;
-        patch(null, subTree, container, anchor);
-        instance.isMounted = true;
-      } else {
-        const subTree = render3.call(instance.proxy, instance.proxy);
-        patch(instance.subTree, subTree, container, anchor);
-      }
-    };
-    const effect2 = new ReactiveEffect(componentUpdateFn, () => {
-      queueJob(update);
-    });
-    const update = () => {
-      effect2.run();
-    };
-    instance.update = update;
-    update();
+    const { render: render3, props = {} } = vnode.type;
+    vnode.component = creatInstance(vnode);
+    getPropsAndAttrs(props, vnode.props, vnode.component);
+    setProxy(vnode.component);
+    vnode.component.render = render3;
+    setComponentEffct(vnode.component, container, anchor, patch);
   }
   function patchProps(oldNode, vNode, el) {
     const oldProps = oldNode.props || {};
