@@ -1,10 +1,10 @@
 import { isString } from '@vue3/shared';
 import { ShapeFlags } from './shapeFlags.js';
 import { getLIS } from './getLIS.js';
-import { reactive } from '../../reactive/index.js';
+import { proxyRef, reactive } from '../../reactive/index.js';
 import { ReactiveEffect } from '../../reactive/src/effect.js';
 import { queueJob } from './schedule.js';
-import { hasOwn } from '@vue3/shared/src/utils.js';
+import { hasOwn, isFunction } from '@vue3/shared/src/utils.js';
 import { creatInstance, setComponentEffct, setProxy } from '../../reactive/src/components.js';
 
 export const Fragment = Symbol('Fragment');
@@ -23,6 +23,9 @@ export function createRenderer(options: any) {
 	} = options;
 
 	function mountChildren(children: any, container: any) {
+		if(!(children instanceof Array)){
+			patch(null,children,container)
+		}
 		for (let i = 0; i < children.length; i++) {
 			patch(null, children[i], container);
 		}
@@ -66,6 +69,16 @@ export function createRenderer(options: any) {
 		}
 	}
 
+	function processText(oldVnode:any, vnode:any, container:any, anchor:any){
+		if(!oldVnode){
+			vnode.el=hostCreateText(vnode.children)
+			hostInsert(vnode.el,container,anchor)
+		}else{
+			vnode.el=oldVnode.el
+			hostSetText(vnode.el,vnode.children)
+		}
+	}
+
 	function patch(oldVnode: any, vnode: any, container: any, anchor?: any) {
 		if (vnode === oldVnode) {
 			return;
@@ -78,9 +91,25 @@ export function createRenderer(options: any) {
 				return mountElement(vnode, container, anchor);
 			}
 		}
+
+		if(vnode.type==="text"){
+			processText(oldVnode, vnode, container, anchor)
+			return 
+		}
 		if (vnode.type === Fragment) {
 			processFragment(oldVnode, vnode, container, anchor);
 			return;
+		}
+
+		if (vnode.shapeFlag & ShapeFlags.TELEPORT) {
+			vnode.type.process(oldVnode, vnode, container, anchor, {
+				mountChildren,
+				patchChildren,
+				move(vnode: any, container: any, anchor: any) {
+					hostInsert(vnode.component ? vnode.component.subTree.el : vnode.el, container, anchor);
+				},
+			});
+			return
 		}
 		if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
 			processComponents(oldVnode, vnode, container, anchor);
@@ -95,7 +124,6 @@ export function createRenderer(options: any) {
 	}
 
 	function processComponents(oldVnode: any, vnode: any, container: any, anchor?: any) {
-		
 		if (!oldVnode) {
 			// 首次挂载
 			mountComponent(vnode, container, anchor);
@@ -115,19 +143,17 @@ export function createRenderer(options: any) {
 	}
 
 	function updateProps(vnode: any, oldProps: any, newProps: any) {
-		
-		const instance=vnode.component
-		const props=vnode.props
-		if(propsHasChanged(oldProps,newProps)){
+		const instance = vnode.component;
+		const props = vnode.props;
+		if (propsHasChanged(oldProps, newProps)) {
 			// 把所有的新的都更新
-			for(let key in newProps){
-				instance.props[key]=newProps[key]
+			for (let key in newProps) {
+				instance.props[key] = newProps[key];
 			}
 			// 把老的上面新的没有的都删除
-			for(let key in oldProps){
-				if(!hasOwn(newProps,key)){
-					delete instance.props[key]
-					
+			for (let key in oldProps) {
+				if (!hasOwn(newProps, key)) {
+					delete instance.props[key];
 				}
 			}
 		}
@@ -137,7 +163,7 @@ export function createRenderer(options: any) {
 		const { props: oldProps } = oldVnode.component;
 		const { props: newProps } = vnode;
 		vnode.component = oldVnode.component;
-		updateProps(vnode,oldProps,newProps);
+		updateProps(vnode, oldProps, newProps);
 	}
 
 	function getPropsAndAttrs(props: any, all: any, instance: any) {
@@ -158,17 +184,44 @@ export function createRenderer(options: any) {
 		instance.props = reactive(newProps);
 	}
 
-	function mountComponent(vnode: any, container: any, anchor?: any) {
-		const { render, props = {} } = vnode.type;
+	function initSlot(instance: any) {
+		if (instance.vnode.shapeFlag & ShapeFlags.SLOTS_CHILDREN) instance.slots = instance.vnode.children;
+	}
 
+	function mountComponent(vnode: any, container: any, anchor?: any) {
+		const { render, props = {}, setup } = vnode.type;
 		// 创建一个组件实例
 		vnode.component = creatInstance(vnode);
+		const instance = vnode.component;
+		initSlot(instance);
 		// 把props 和attrs区分开
 		getPropsAndAttrs(props, vnode.props, vnode.component);
 
 		// 创建组件实例的响应式
 		setProxy(vnode.component);
-		vnode.component.render = render;
+
+		if (setup) {
+			let setupContext = {
+				slots: instance.slots,
+				attrs: instance.attrs,
+				expose(val: any) {
+					instance.exposed = val;
+				},
+				emit(name: any, ...payload: any[]) {
+					let eventName = 'on' + name[0].toUpperCase() + name.slice(1);
+					instance.vnode.props[eventName](...payload);
+				},
+			};
+			let setupRes = setup(vnode.component.props, setupContext);
+			if (isFunction(setupRes)) {
+				vnode.component.render = setupRes;
+			} else {
+				const setupProps = proxyRef(setupRes);
+				vnode.component.setupProps = setupProps;
+			}
+		}
+
+		if (!vnode.component.render) vnode.component.render = render;
 		// 组件的activeeffect,数据变化重新渲染
 		setComponentEffct(vnode.component, container, anchor, patch);
 	}
@@ -189,10 +242,21 @@ export function createRenderer(options: any) {
 	}
 
 	function unmount(vNode: any) {
+		const { shapeFlag, type } = vNode;
+		if (type === Fragment) {
+			unmountChildren(vNode);
+			hostRemove();
+		}else if(shapeFlag&ShapeFlags.TELEPORT){
+			unmountChildren(vNode)
+			return
+		}
+		 else if (shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
+			hostRemove(vNode.component.subTree.el);
+		}
 		hostRemove(vNode.el);
 	}
 
-	function unmountChildren(oldVnode: any, container: any) {
+	function unmountChildren(oldVnode: any) {
 		for (let i = 0; i < oldVnode.children.length; i++) {
 			unmount(oldVnode.children[i]);
 		}
@@ -310,7 +374,7 @@ export function createRenderer(options: any) {
 
 		if (vNode.shapeFlag & ShapeFlags.TEXT_CHILDREN) {
 			if (oldVnode.shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-				unmountChildren(oldVnode, el);
+				unmountChildren(oldVnode);
 			}
 			if (oldChildren !== newChildren) {
 				hostSetElementText(el, newChildren.children);
@@ -338,14 +402,12 @@ export function createRenderer(options: any) {
 	}
 
 	let render = (vnode: any, container: any) => {
-		
 		if (container._node) {
 			patch(container._node, vnode, container);
 		} else {
-			
 			patch(null, vnode, container);
 		}
-		
+
 		container._node = vnode;
 	};
 	return {

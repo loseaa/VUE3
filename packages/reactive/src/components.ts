@@ -15,19 +15,24 @@ export function creatInstance(vnode: any) {
 		props: null,
 		attrs: null,
 		proxy: {},
-        render:null
+        render:null,
+		slots:{},
+		exposed:{}
 	};
 }
 
 const publicProperty: any = {
 	$attrs: (instance: any) => instance.attrs,
+	$slots:(instance :any)=>instance.slots
 };
 
 export function setProxy(instance: any) {
 	instance.proxy = new Proxy(instance, {
 		get(target, key) {
-			const { data, props } = target;
-            console.log(data);
+			const { data, props,setupProps } = target;
+			if(setupProps&&hasOwn(setupProps,key)){
+				return setupProps[key]
+			}
             
 			if (hasOwn(publicProperty, key)) {
 				return publicProperty[key](target);

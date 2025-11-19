@@ -82,9 +82,38 @@ function patchProp(el, key, prevValue, nextValue) {
   }
 }
 
+// packages/runtime-core/src/Teleport.ts
+var Teleport = {
+  __is_Teleport: true,
+  process(n1, n2, container, anchor, context) {
+    const { patchChildren, mountChildren, move } = context;
+    const TPTarget = document.querySelector(n2.props.to);
+    if (!n1) {
+      mountChildren(n2.children, TPTarget);
+    } else {
+      patchChildren(n1, n2, TPTarget);
+      if (n1.props.to !== n2.props.to) {
+        if (n2.children instanceof Array) {
+          n2.children.forEach((child) => {
+            move(child, TPTarget, anchor);
+          });
+        } else {
+          move(n2.children, TPTarget, anchor);
+        }
+      }
+    }
+  }
+};
+function isTeleport(val) {
+  return val?.__is_Teleport;
+}
+
 // packages/shared/src/utils.ts
 function isObject(value) {
   return value !== null && typeof value === "object";
+}
+function isFunction(value) {
+  return typeof value === "function";
 }
 function isString(value) {
   return typeof value === "string";
@@ -139,6 +168,18 @@ function getLIS(arr) {
 }
 
 // packages/reactive/src/effect.ts
+function effect(fn, options = {}) {
+  let _effect = new ReactiveEffect(
+    fn,
+    options.scheduler || (() => {
+      _effect.run();
+    })
+  );
+  _effect.run();
+  let runner = _effect.run.bind(_effect);
+  runner.effect = _effect;
+  return runner;
+}
 var activeEffect;
 function preEffectClean(effect2) {
   effect2.trackId++;
@@ -292,6 +333,182 @@ function creatReactiveObject(target) {
   return proxy;
 }
 
+// packages/reactive/src/ref.ts
+function ref(value) {
+  return createRef(value);
+}
+function createRef(value) {
+  return new RefImpl(value);
+}
+function createReactive(value) {
+  return isObject(value) ? reactive(value) : value;
+}
+function trackRefValue(ref2) {
+  if (activeEffect) {
+    trackEffect(activeEffect, ref2.dep);
+  }
+}
+function triggerRefValue(ref2) {
+  triggerEffects(ref2.dep);
+}
+var RefImpl = class {
+  __v_isRef = true;
+  _rawValue;
+  dep = /* @__PURE__ */ new Map();
+  constructor(value) {
+    this._rawValue = value;
+  }
+  get value() {
+    trackRefValue(this);
+    return createReactive(this._rawValue);
+  }
+  set value(newValue) {
+    if (newValue === this._rawValue) return;
+    if (isObject(newValue)) {
+      this._rawValue = reactive(newValue);
+    } else {
+      this._rawValue = newValue;
+    }
+    triggerRefValue(this);
+  }
+};
+var ObjectRefImpl = class {
+  constructor(_object, _key) {
+    this._object = _object;
+    this._key = _key;
+  }
+  __v_isRef = true;
+  get value() {
+    return this._object[this._key];
+  }
+  set value(newValue) {
+    this._object[this._key] = newValue;
+  }
+};
+function toRef(object, key) {
+  return new ObjectRefImpl(object, key);
+}
+function toRefs(object) {
+  const result = {};
+  for (let key in object) {
+    result[key] = toRef(object, key);
+  }
+  return result;
+}
+function proxyRef(value) {
+  return new Proxy(value, {
+    get(target, key, receiver) {
+      const r = Reflect.get(target, key, receiver);
+      return isRef(r) ? r.value : r;
+    },
+    set(target, key, value2, receiver) {
+      const r = Reflect.get(target, key, receiver);
+      if (isRef(r)) {
+        r.value = value2;
+        return true;
+      } else {
+        return Reflect.set(target, key, value2, receiver);
+      }
+    }
+  });
+}
+function isRef(r) {
+  return r ? r.__v_isRef === true : false;
+}
+
+// packages/reactive/src/computed.ts
+function computed(getter) {
+  return creatComputedRef(getter);
+}
+function creatComputedRef(getter) {
+  if (isFunction(getter)) {
+    return new ComputedRefImpl(getter, void 0);
+  } else {
+    return new ComputedRefImpl(getter.get, getter.set);
+  }
+}
+var ComputedRefImpl = class {
+  constructor(_getter, _setter) {
+    this._getter = _getter;
+    this._setter = _setter;
+    this._effect = new ReactiveEffect(_getter, () => {
+      this._dirty = true;
+      triggerRefValue(this);
+    });
+  }
+  __v_isRef = true;
+  _value;
+  _dirty = true;
+  _effect;
+  dep = /* @__PURE__ */ new Map();
+  set value(newValue) {
+    if (this._setter) {
+      this._setter(newValue);
+    } else {
+      console.warn("computed is readonly");
+    }
+  }
+  get value() {
+    trackRefValue(this);
+    if (this._dirty) {
+      this._dirty = false;
+      this._value = this._effect.run();
+    }
+    return this._value;
+  }
+};
+
+// packages/reactive/src/watchAPI.ts
+function traverse(value, deep, seen = /* @__PURE__ */ new Set()) {
+  if (value.__v_isRef)
+    return traverse(value.value, deep, seen);
+  if (typeof value !== "object" || value === null || seen.has(value)) {
+    return value;
+  }
+  seen.add(value);
+  if (!deep) {
+    for (const key in value) {
+      value[key];
+    }
+  }
+  for (const key in value) {
+    traverse(value[key], deep, seen);
+  }
+  return value;
+}
+function watch(state, cb, options) {
+  let getter;
+  if (typeof state === "function") {
+    getter = state;
+  } else {
+    getter = () => traverse(state, options?.deep);
+  }
+  let effect2 = new ReactiveEffect(getter, () => {
+    const newValue = effect2.run();
+    cb(newValue, oldValue);
+    oldValue = newValue;
+  });
+  let oldValue = effect2.run();
+  if (options?.immediate) {
+    cb(oldValue, void 0);
+    oldValue = getter();
+  }
+  let unwatch = () => {
+    effect2.stop();
+  };
+  return unwatch;
+}
+function watchEffect(cb, options) {
+  let effect2 = new ReactiveEffect(cb, () => {
+    cb();
+  });
+  effect2.run();
+  let unwatch = () => {
+    effect2.stop();
+  };
+  return unwatch;
+}
+
 // packages/runtime-core/src/schedule.ts
 var queue = [];
 var flushing = false;
@@ -323,17 +540,22 @@ function creatInstance(vnode) {
     props: null,
     attrs: null,
     proxy: {},
-    render: null
+    render: null,
+    slots: {},
+    exposed: {}
   };
 }
 var publicProperty = {
-  $attrs: (instance) => instance.attrs
+  $attrs: (instance) => instance.attrs,
+  $slots: (instance) => instance.slots
 };
 function setProxy(instance) {
   instance.proxy = new Proxy(instance, {
     get(target, key) {
-      const { data, props } = target;
-      console.log(data);
+      const { data, props, setupProps } = target;
+      if (setupProps && hasOwn(setupProps, key)) {
+        return setupProps[key];
+      }
       if (hasOwn(publicProperty, key)) {
         return publicProperty[key](target);
       }
@@ -397,6 +619,9 @@ function createRenderer(options) {
     patchProp: hostPatchProp
   } = options;
   function mountChildren(children, container) {
+    if (!(children instanceof Array)) {
+      patch(null, children, container);
+    }
     for (let i = 0; i < children.length; i++) {
       patch(null, children[i], container);
     }
@@ -433,6 +658,15 @@ function createRenderer(options) {
       patchChildren(oldVnode, vnode, container);
     }
   }
+  function processText(oldVnode, vnode, container, anchor) {
+    if (!oldVnode) {
+      vnode.el = hostCreateText(vnode.children);
+      hostInsert(vnode.el, container, anchor);
+    } else {
+      vnode.el = oldVnode.el;
+      hostSetText(vnode.el, vnode.children);
+    }
+  }
   function patch(oldVnode, vnode, container, anchor) {
     if (vnode === oldVnode) {
       return;
@@ -445,8 +679,22 @@ function createRenderer(options) {
         return mountElement(vnode, container, anchor);
       }
     }
+    if (vnode.type === "text") {
+      processText(oldVnode, vnode, container, anchor);
+      return;
+    }
     if (vnode.type === Fragment) {
       processFragment(oldVnode, vnode, container, anchor);
+      return;
+    }
+    if (vnode.shapeFlag & 64 /* TELEPORT */) {
+      vnode.type.process(oldVnode, vnode, container, anchor, {
+        mountChildren,
+        patchChildren,
+        move(vnode2, container2, anchor2) {
+          hostInsert(vnode2.component ? vnode2.component.subTree.el : vnode2.el, container2, anchor2);
+        }
+      });
       return;
     }
     if (vnode.shapeFlag & 4 /* STATEFUL_COMPONENT */) {
@@ -509,12 +757,37 @@ function createRenderer(options) {
     instance.attrs = attrs;
     instance.props = reactive(newProps);
   }
+  function initSlot(instance) {
+    if (instance.vnode.shapeFlag & 32 /* SLOTS_CHILDREN */) instance.slots = instance.vnode.children;
+  }
   function mountComponent(vnode, container, anchor) {
-    const { render: render3, props = {} } = vnode.type;
+    const { render: render3, props = {}, setup } = vnode.type;
     vnode.component = creatInstance(vnode);
+    const instance = vnode.component;
+    initSlot(instance);
     getPropsAndAttrs(props, vnode.props, vnode.component);
     setProxy(vnode.component);
-    vnode.component.render = render3;
+    if (setup) {
+      let setupContext = {
+        slots: instance.slots,
+        attrs: instance.attrs,
+        expose(val) {
+          instance.exposed = val;
+        },
+        emit(name, ...payload) {
+          let eventName = "on" + name[0].toUpperCase() + name.slice(1);
+          instance.vnode.props[eventName](...payload);
+        }
+      };
+      let setupRes = setup(vnode.component.props, setupContext);
+      if (isFunction(setupRes)) {
+        vnode.component.render = setupRes;
+      } else {
+        const setupProps = proxyRef(setupRes);
+        vnode.component.setupProps = setupProps;
+      }
+    }
+    if (!vnode.component.render) vnode.component.render = render3;
     setComponentEffct(vnode.component, container, anchor, patch);
   }
   function patchProps(oldNode, vNode, el) {
@@ -532,9 +805,19 @@ function createRenderer(options) {
     }
   }
   function unmount(vNode) {
+    const { shapeFlag, type } = vNode;
+    if (type === Fragment) {
+      unmountChildren(vNode);
+      hostRemove();
+    } else if (shapeFlag & 64 /* TELEPORT */) {
+      unmountChildren(vNode);
+      return;
+    } else if (shapeFlag & 4 /* STATEFUL_COMPONENT */) {
+      hostRemove(vNode.component.subTree.el);
+    }
     hostRemove(vNode.el);
   }
-  function unmountChildren(oldVnode, container) {
+  function unmountChildren(oldVnode) {
     for (let i = 0; i < oldVnode.children.length; i++) {
       unmount(oldVnode.children[i]);
     }
@@ -623,7 +906,7 @@ function createRenderer(options) {
     const newChildren = vNode.children || [];
     if (vNode.shapeFlag & 8 /* TEXT_CHILDREN */) {
       if (oldVnode.shapeFlag & 16 /* ARRAY_CHILDREN */) {
-        unmountChildren(oldVnode, el);
+        unmountChildren(oldVnode);
       }
       if (oldChildren !== newChildren) {
         hostSetElementText(el, newChildren.children);
@@ -679,7 +962,7 @@ function h(type, propsOrChildren, children) {
       return createVnode(type, propsOrChildren, children);
     }
     if (children && !(children instanceof Array)) {
-      children = [children];
+      children = children;
     }
     return createVnode(type, propsOrChildren, children);
   } else {
@@ -699,12 +982,14 @@ function createTextVNode(text) {
   };
 }
 function createVnode(type, props, children) {
-  let shapeFlag = isString(type) ? 1 /* ELEMENT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
+  let shapeFlag = isString(type) ? 1 /* ELEMENT */ : isTeleport(type) ? 64 /* TELEPORT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
   if (children) {
     if (isString(children)) {
       shapeFlag |= 8 /* TEXT_CHILDREN */;
     } else if (children instanceof Array) {
       shapeFlag |= 16 /* ARRAY_CHILDREN */;
+    } else if (children instanceof Object) {
+      shapeFlag |= 32 /* SLOTS_CHILDREN */;
     }
   }
   if (children && isString(children)) {
@@ -736,8 +1021,18 @@ var render = (vnode, container) => {
 console.log(render);
 export {
   Fragment,
+  Teleport,
+  computed,
+  effect,
   h,
+  proxyRef,
+  reactive,
+  ref,
   render,
-  renderOption
+  renderOption,
+  toRef,
+  toRefs,
+  watch,
+  watchEffect
 };
 //# sourceMappingURL=runtime-dom.js.map

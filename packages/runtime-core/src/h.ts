@@ -1,5 +1,6 @@
-import { isObject, isString } from "@vue3/shared";
-import { ShapeFlags } from "./shapeFlags.js";
+import { isObject, isString } from '@vue3/shared';
+import { ShapeFlags } from './shapeFlags.js';
+import { isTeleport } from './Teleport.js';
 
 export function h(type: string, propsOrChildren?: any, children?: any) {
 	let l = arguments.length;
@@ -7,55 +8,56 @@ export function h(type: string, propsOrChildren?: any, children?: any) {
 		if (typeof propsOrChildren === 'object' && !propsOrChildren.__v_isVnode && !(propsOrChildren instanceof Array)) {
 			return createVnode(type, propsOrChildren, null);
 		} else {
-            if(isString(propsOrChildren)){
-                return createVnode(type, null, propsOrChildren);
-            }
-			if(propsOrChildren instanceof Array){
+			if (isString(propsOrChildren)) {
+				return createVnode(type, null, propsOrChildren);
+			}
+			if (propsOrChildren instanceof Array) {
 				return createVnode(type, null, propsOrChildren);
 			}
 			return createVnode(type, null, [propsOrChildren]);
 		}
-	}else if(l===3){
-        if(isString(children)){
-            return createVnode(type, propsOrChildren, children);
-        }
-		if(children&&!(children instanceof Array)){
-            children = [children];
-        }
+	} else if (l === 3) {
+		if (isString(children)) {
+			return createVnode(type, propsOrChildren, children);
+		}
+		if (children && !(children instanceof Array)) {
+			children = children;
+		}
 		return createVnode(type, propsOrChildren, children);
-	}else {
-        let children = [];
-        for(let i=2;i<l;i++){
-            children.push(arguments[i]);
-        }
-        return createVnode(type, propsOrChildren, children);
-    }
+	} else {
+		let children = [];
+		for (let i = 2; i < l; i++) {
+			children.push(arguments[i]);
+		}
+		return createVnode(type, propsOrChildren, children);
+	}
 }
 
-function createTextVNode(text:string) {
-  return {
-    type: "text",
-    children: text,
-    el: null // 在挂载时才会设置
-  }
+function createTextVNode(text: string) {
+	return {
+		type: 'text',
+		children: text,
+		el: null, // 在挂载时才会设置
+	};
 }
 
 function createVnode(type: string, props: any, children: any) {
-	 let shapeFlag = isString(type) ? ShapeFlags.ELEMENT :isObject(type)? ShapeFlags.STATEFUL_COMPONENT:0;
-
-	 if(children){
-        if(isString(children)){
-            shapeFlag |= ShapeFlags.TEXT_CHILDREN;
-        }else if(children instanceof Array){
-            shapeFlag |= ShapeFlags.ARRAY_CHILDREN;
-        }
-    }
-	if(children&&isString(children)){
+	let shapeFlag = isString(type) ? ShapeFlags.ELEMENT : isTeleport(type) ? ShapeFlags.TELEPORT : isObject(type) ? ShapeFlags.STATEFUL_COMPONENT : 0;
+	if (children) {
+		if (isString(children)) {
+			shapeFlag |= ShapeFlags.TEXT_CHILDREN;
+		} else if (children instanceof Array) {
+			shapeFlag |= ShapeFlags.ARRAY_CHILDREN;
+		} else if (children instanceof Object) {
+			shapeFlag |= ShapeFlags.SLOTS_CHILDREN;
+		}
+	}
+	if (children && isString(children)) {
 		children = createTextVNode(children);
 	}
-	if(children){
-		for(let i=0;i<children.length;i++){
-			if(isString(children[i])){
+	if (children) {
+		for (let i = 0; i < children.length; i++) {
+			if (isString(children[i])) {
 				children[i] = createTextVNode(children[i]);
 			}
 		}
@@ -67,6 +69,6 @@ function createVnode(type: string, props: any, children: any) {
 		children,
 		key: props?.key,
 		shapeFlag,
-		el: null
+		el: null,
 	};
 }

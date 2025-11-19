@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script type="module">
+			import { h, render, Fragment,ref } from './runtime-dom.js';
+
+            let comp={
+                data:()=>{
+                    return {
+
+                    }
+                },
+                render(proxy){
+                    console.log(proxy.$slots);
+                    
+                    return h("div",[proxy.$slots.header(),h("div","okok"),proxy.$slots.footer()])
+                },
+                // setup
+            }
+			let vueComponent = {
+				data: () => {
+					return {
+						msg: "hello world",
+					};
+				},
+				render() {
+                    return h(comp,null,{header:()=>h("div","header"),footer:()=>h("div","footer")}) 
+				},
+
+			};
+			render(h(vueComponent), app);
+		</script>
+	</body>
+</html>
