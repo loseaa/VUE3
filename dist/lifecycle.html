@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<div id="root"></div>
+		<div id="root2"></div>
+		<script type="module">
+			import { h, render, Teleport, ref, onMounted,onBeforeMount,onUpdated,onBeforeUpdated } from './runtime-dom.js';
+
+			let vueComponent = {
+				data(){
+					return{
+						count:0
+					}
+				},
+				setup() {
+					// const count = ref(0);
+					onMounted(
+						(curr) => {
+						console.log('组件挂载完成',curr);
+					});
+					onBeforeMount((curr)=>{
+						console.log('组件挂载前',curr)
+					})
+					onUpdated(()=>{
+						console.log('组件更新完成');
+					})
+					onBeforeUpdated(()=>{
+						console.log('组件更新前');
+					})
+
+					return function(){
+						console.log(this.count);
+						
+						return h("button",{
+							onClick:()=>{
+							
+								this.count++;
+								
+								console.log(this);
+							}
+						}, this.count+"")
+					};
+				},
+			};
+			render(h(vueComponent), app);
+		</script>
+	</body>
+</html>

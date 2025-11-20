@@ -70,5 +70,6 @@ function createVnode(type: string, props: any, children: any) {
 		key: props?.key,
 		shapeFlag,
 		el: null,
+		ref: props?.ref,
 	};
 }

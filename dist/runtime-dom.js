@@ -528,6 +528,21 @@ function queueJob(job) {
   }
 }
 
+// packages/runtime-core/src/lifeCycle.ts
+function createHook(type) {
+  return function(fn, target = currentInstance) {
+    if (target) {
+      (target.hooks[type] || (target.hooks[type] = [])).push((t = target) => {
+        fn(t);
+      });
+    }
+  };
+}
+var onMounted = createHook("m" /* MOUNTED */);
+var onBeforeMount = createHook("bm" /* BEFOREMOUNTED */);
+var onUpdated = createHook("u" /* UPDATED */);
+var onBeforeUpdated = createHook("bu" /* BEFOREUPDTATED */);
+
 // packages/reactive/src/components.ts
 function creatInstance(vnode) {
   const { data = () => ({}) } = vnode.type;
@@ -542,7 +557,13 @@ function creatInstance(vnode) {
     proxy: {},
     render: null,
     slots: {},
-    exposed: {}
+    exposed: null,
+    hooks: {
+      ["m" /* MOUNTED */]: [],
+      ["u" /* UPDATED */]: [],
+      ["bm" /* BEFOREMOUNTED */]: [],
+      ["bu" /* BEFOREUPDTATED */]: []
+    }
   };
 }
 var publicProperty = {
@@ -586,12 +607,16 @@ function setComponentEffct(instance, container, anchor, patch) {
     if (!instance.isMounted) {
       const subTree = render2.call(instance.proxy, instance.proxy);
       instance.subTree = subTree;
+      instance.hooks["bm" /* BEFOREMOUNTED */].forEach((fn) => fn());
       patch(null, subTree, container, anchor);
+      instance.hooks["m" /* MOUNTED */].forEach((fn) => fn());
       instance.isMounted = true;
     } else {
       const subTree = render2.call(instance.proxy, instance.proxy);
+      instance.hooks["bu" /* BEFOREUPDTATED */].forEach((fn) => fn());
       patch(instance.subTree, subTree, container, anchor);
       instance.subTree = subTree;
+      instance.hooks["u" /* UPDATED */].forEach((fn) => fn());
     }
   };
   const effect2 = new ReactiveEffect(componentUpdateFn, () => {
@@ -602,6 +627,13 @@ function setComponentEffct(instance, container, anchor, patch) {
   };
   instance.update = update;
   update();
+}
+var currentInstance = null;
+function setCurrentInstance(instance) {
+  currentInstance = instance;
+}
+function clearCurrentInstance() {
+  currentInstance = null;
 }
 
 // packages/runtime-core/src/createRenderer.ts
@@ -667,6 +699,17 @@ function createRenderer(options) {
       hostSetText(vnode.el, vnode.children);
     }
   }
+  function setRef(vnode) {
+    if (vnode.shapeFlag & 4 /* STATEFUL_COMPONENT */) {
+      if (vnode.component?.exposed) {
+        vnode.ref.value = vnode.component.exposed;
+      } else {
+        vnode.ref.value = vnode.component.proxy;
+      }
+    } else {
+      vnode.ref.value = vnode.el;
+    }
+  }
   function patch(oldVnode, vnode, container, anchor) {
     if (vnode === oldVnode) {
       return;
@@ -676,15 +719,25 @@ function createRenderer(options) {
     }
     if (!oldVnode) {
       if (vnode.shapeFlag & 1 /* ELEMENT */) {
-        return mountElement(vnode, container, anchor);
+        mountElement(vnode, container, anchor);
+        if (vnode.ref) {
+          setRef(vnode);
+        }
+        return;
       }
     }
     if (vnode.type === "text") {
       processText(oldVnode, vnode, container, anchor);
+      if (vnode.ref) {
+        setRef(vnode);
+      }
       return;
     }
     if (vnode.type === Fragment) {
       processFragment(oldVnode, vnode, container, anchor);
+      if (vnode.ref) {
+        setRef(vnode);
+      }
       return;
     }
     if (vnode.shapeFlag & 64 /* TELEPORT */) {
@@ -695,16 +748,29 @@ function createRenderer(options) {
           hostInsert(vnode2.component ? vnode2.component.subTree.el : vnode2.el, container2, anchor2);
         }
       });
+      if (vnode.ref) {
+        setRef(vnode);
+      }
       return;
     }
     if (vnode.shapeFlag & 4 /* STATEFUL_COMPONENT */) {
       processComponents(oldVnode, vnode, container, anchor);
+      if (vnode.ref) {
+        setRef(vnode);
+      }
     } else {
       if (!isSameVnodeType(oldVnode, vnode)) {
         if (oldVnode) unmount(oldVnode);
-        return mountElement(vnode, container, anchor);
+        mountElement(vnode, container, anchor);
+        if (vnode.ref) {
+          setRef(vnode);
+        }
+        return;
       } else {
         patchElement(oldVnode, vnode);
+        if (vnode.ref) {
+          setRef(vnode);
+        }
       }
     }
   }
@@ -779,7 +845,9 @@ function createRenderer(options) {
           instance.vnode.props[eventName](...payload);
         }
       };
+      setCurrentInstance(instance);
       let setupRes = setup(vnode.component.props, setupContext);
+      clearCurrentInstance();
       if (isFunction(setupRes)) {
         vnode.component.render = setupRes;
       } else {
@@ -1009,7 +1077,8 @@ function createVnode(type, props, children) {
     children,
     key: props?.key,
     shapeFlag,
-    el: null
+    el: null,
+    ref: props?.ref
   };
 }
 
@@ -1023,8 +1092,13 @@ export {
   Fragment,
   Teleport,
   computed,
+  createRenderer,
   effect,
   h,
+  onBeforeMount,
+  onBeforeUpdated,
+  onMounted,
+  onUpdated,
   proxyRef,
   reactive,
   ref,

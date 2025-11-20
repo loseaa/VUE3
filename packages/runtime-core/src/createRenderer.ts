@@ -5,7 +5,7 @@ import { proxyRef, reactive } from '../../reactive/index.js';
 import { ReactiveEffect } from '../../reactive/src/effect.js';
 import { queueJob } from './schedule.js';
 import { hasOwn, isFunction } from '@vue3/shared/src/utils.js';
-import { creatInstance, setComponentEffct, setProxy } from '../../reactive/src/components.js';
+import { clearCurrentInstance, creatInstance, setComponentEffct, setCurrentInstance, setProxy } from '../../reactive/src/components.js';
 
 export const Fragment = Symbol('Fragment');
 
@@ -23,8 +23,8 @@ export function createRenderer(options: any) {
 	} = options;
 
 	function mountChildren(children: any, container: any) {
-		if(!(children instanceof Array)){
-			patch(null,children,container)
+		if (!(children instanceof Array)) {
+			patch(null, children, container);
 		}
 		for (let i = 0; i < children.length; i++) {
 			patch(null, children[i], container);
@@ -69,13 +69,26 @@ export function createRenderer(options: any) {
 		}
 	}
 
-	function processText(oldVnode:any, vnode:any, container:any, anchor:any){
-		if(!oldVnode){
-			vnode.el=hostCreateText(vnode.children)
-			hostInsert(vnode.el,container,anchor)
-		}else{
-			vnode.el=oldVnode.el
-			hostSetText(vnode.el,vnode.children)
+	function processText(oldVnode: any, vnode: any, container: any, anchor: any) {
+		if (!oldVnode) {
+			vnode.el = hostCreateText(vnode.children);
+			hostInsert(vnode.el, container, anchor);
+		} else {
+			vnode.el = oldVnode.el;
+			hostSetText(vnode.el, vnode.children);
+		}
+	}
+
+	function setRef(vnode: any) {
+		
+		if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
+			if (vnode.component?.exposed) {
+				vnode.ref.value = vnode.component.exposed;
+			} else {
+				vnode.ref.value = vnode.component.proxy;
+			}
+		} else {
+			vnode.ref.value = vnode.el;
 		}
 	}
 
@@ -86,18 +99,29 @@ export function createRenderer(options: any) {
 		if (!vnode) {
 			return hostRemove(oldVnode.el);
 		}
+
 		if (!oldVnode) {
 			if (vnode.shapeFlag & ShapeFlags.ELEMENT) {
-				return mountElement(vnode, container, anchor);
+				mountElement(vnode, container, anchor);
+				if (vnode.ref) {
+					setRef(vnode);
+				}
+				return;
 			}
 		}
 
-		if(vnode.type==="text"){
-			processText(oldVnode, vnode, container, anchor)
-			return 
+		if (vnode.type === 'text') {
+			processText(oldVnode, vnode, container, anchor);
+			if (vnode.ref) {
+				setRef(vnode);
+			}
+			return;
 		}
 		if (vnode.type === Fragment) {
 			processFragment(oldVnode, vnode, container, anchor);
+			if (vnode.ref) {
+				setRef(vnode);
+			}
 			return;
 		}
 
@@ -109,16 +133,31 @@ export function createRenderer(options: any) {
 					hostInsert(vnode.component ? vnode.component.subTree.el : vnode.el, container, anchor);
 				},
 			});
-			return
+			if (vnode.ref) {
+				setRef(vnode);
+			}
+			return;
 		}
 		if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
 			processComponents(oldVnode, vnode, container, anchor);
+			if (vnode.ref) {
+				setRef(vnode);
+			}
+			
 		} else {
 			if (!isSameVnodeType(oldVnode, vnode)) {
 				if (oldVnode) unmount(oldVnode);
-				return mountElement(vnode, container, anchor);
+
+				mountElement(vnode, container, anchor);
+				if (vnode.ref) {
+					setRef(vnode);
+				}
+				return;
 			} else {
 				patchElement(oldVnode, vnode);
+				if (vnode.ref) {
+					setRef(vnode);
+				}
 			}
 		}
 	}
@@ -195,6 +234,7 @@ export function createRenderer(options: any) {
 		const instance = vnode.component;
 		initSlot(instance);
 		// 把props 和attrs区分开
+
 		getPropsAndAttrs(props, vnode.props, vnode.component);
 
 		// 创建组件实例的响应式
@@ -212,7 +252,9 @@ export function createRenderer(options: any) {
 					instance.vnode.props[eventName](...payload);
 				},
 			};
+			setCurrentInstance(instance);
 			let setupRes = setup(vnode.component.props, setupContext);
+			clearCurrentInstance();
 			if (isFunction(setupRes)) {
 				vnode.component.render = setupRes;
 			} else {
@@ -246,11 +288,10 @@ export function createRenderer(options: any) {
 		if (type === Fragment) {
 			unmountChildren(vNode);
 			hostRemove();
-		}else if(shapeFlag&ShapeFlags.TELEPORT){
-			unmountChildren(vNode)
-			return
-		}
-		 else if (shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
+		} else if (shapeFlag & ShapeFlags.TELEPORT) {
+			unmountChildren(vNode);
+			return;
+		} else if (shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
 			hostRemove(vNode.component.subTree.el);
 		}
 		hostRemove(vNode.el);
@@ -326,7 +367,6 @@ export function createRenderer(options: any) {
 			// for(let j=e2;j>=s2;j--){
 			// 	let anchor=newChildren[j+1]?.el;
 			// 	console.log(anchor);
-			// 	// debugger
 			// 	if(!newChildren[j]?.el){
 			// 		patch(null,newChildren[j],el,anchor)
 			// 	}else{

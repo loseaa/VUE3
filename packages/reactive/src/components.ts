@@ -2,6 +2,7 @@ import { hasOwn } from '@VUE3/shared/src/utils.js';
 import { ReactiveEffect } from './effect.js';
 import { queueJob } from '../../runtime-core/src/schedule.js';
 import { reactive } from './reactive.js';
+import { LIFECYCLE } from '../../runtime-core/src/lifeCycle.js';
 
 export function creatInstance(vnode: any) {
     const {data=()=>({})} =vnode.type
@@ -17,7 +18,13 @@ export function creatInstance(vnode: any) {
 		proxy: {},
         render:null,
 		slots:{},
-		exposed:{}
+		exposed:null,
+		hooks:{
+            [LIFECYCLE.MOUNTED]:[],
+            [LIFECYCLE.UPDATED]:[],
+            [LIFECYCLE.BEFOREMOUNTED]:[],
+            [LIFECYCLE.BEFOREUPDTATED]:[]
+        }
 	};
 }
 
@@ -66,12 +73,16 @@ export function setComponentEffct(instance: any,container:any,anchor:any,patch:a
 		if (!instance.isMounted) {
 			const subTree = render.call(instance.proxy, instance.proxy);
 			instance.subTree = subTree;
+			instance.hooks[LIFECYCLE.BEFOREMOUNTED].forEach((fn:any)=>fn());
 			patch(null, subTree, container, anchor);
+			instance.hooks[LIFECYCLE.MOUNTED].forEach((fn:any)=>fn());
 			instance.isMounted = true;
 		} else {
 			const subTree = render.call(instance.proxy, instance.proxy);
+			instance.hooks[LIFECYCLE.BEFOREUPDTATED].forEach((fn:any)=>fn());
 			patch(instance.subTree, subTree, container, anchor);
             instance.subTree=subTree
+            instance.hooks[LIFECYCLE.UPDATED].forEach((fn:any)=>fn());
 		}
 	};
 
@@ -83,4 +94,16 @@ export function setComponentEffct(instance: any,container:any,anchor:any,patch:a
 	};
 	(instance.update as any) = update;
 	update();
+}
+
+export let currentInstance: any = null;
+export function setCurrentInstance(instance: any) {
+    currentInstance = instance;
+}
+export function getCurrentInstance() {
+    return currentInstance;
+}
+
+export function clearCurrentInstance() {
+    currentInstance = null;
 }
