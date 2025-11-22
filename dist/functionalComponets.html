@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<div id="root"></div>
+		<div id="root2"></div>
+		<script type="module">
+			import { h, render, Teleport, ref, onMounted,onBeforeMount,onUpdated,onBeforeUpdated } from './runtime-dom.js';
+            function functionalComponents(props){
+                return h("div",{},props.a+""+props.b)
+            }
+			render(h(functionalComponents,{a:123,b:"hello world"}), app);
+		</script>
+	</body>
+</html>

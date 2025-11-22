@@ -3,6 +3,7 @@ import { ReactiveEffect } from './effect.js';
 import { queueJob } from '../../runtime-core/src/schedule.js';
 import { reactive } from './reactive.js';
 import { LIFECYCLE } from '../../runtime-core/src/lifeCycle.js';
+import { ShapeFlags } from '../../runtime-core/src/shapeFlags.js';
 
 export function creatInstance(vnode: any) {
     const {data=()=>({})} =vnode.type
@@ -66,19 +67,30 @@ export function setProxy(instance: any) {
 	});
 }
 
+function renderComponents(instance:any){
+	const {attrs,vnode,render,proxy}=instance
+	if(vnode.shapeFlag&ShapeFlags.STATEFUL_COMPONENT){
+		return render.call(proxy, proxy);
+	}else{
+		return vnode.type(attrs)
+	}
+}
+
 export function setComponentEffct(instance: any,container:any,anchor:any,patch:any) {
+	
 	const componentUpdateFn = () => {
 
         const {render} = instance
 		if (!instance.isMounted) {
-			const subTree = render.call(instance.proxy, instance.proxy);
+			
+			const subTree = renderComponents(instance);
 			instance.subTree = subTree;
 			instance.hooks[LIFECYCLE.BEFOREMOUNTED].forEach((fn:any)=>fn());
 			patch(null, subTree, container, anchor);
 			instance.hooks[LIFECYCLE.MOUNTED].forEach((fn:any)=>fn());
 			instance.isMounted = true;
 		} else {
-			const subTree = render.call(instance.proxy, instance.proxy);
+			const subTree = renderComponents(instance);
 			instance.hooks[LIFECYCLE.BEFOREUPDTATED].forEach((fn:any)=>fn());
 			patch(instance.subTree, subTree, container, anchor);
             instance.subTree=subTree

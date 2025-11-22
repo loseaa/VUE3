@@ -80,7 +80,6 @@ export function createRenderer(options: any) {
 	}
 
 	function setRef(vnode: any) {
-		
 		if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
 			if (vnode.component?.exposed) {
 				vnode.ref.value = vnode.component.exposed;
@@ -143,7 +142,11 @@ export function createRenderer(options: any) {
 			if (vnode.ref) {
 				setRef(vnode);
 			}
-			
+		} else if (vnode.shapeFlag & ShapeFlags.FUNCTIONAL_COMPONENT) {
+			processComponents(oldVnode, vnode, container, anchor);
+			if (vnode.ref) {
+				setRef(vnode);
+			}
 		} else {
 			if (!isSameVnodeType(oldVnode, vnode)) {
 				if (oldVnode) unmount(oldVnode);
@@ -165,6 +168,7 @@ export function createRenderer(options: any) {
 	function processComponents(oldVnode: any, vnode: any, container: any, anchor?: any) {
 		if (!oldVnode) {
 			// 首次挂载
+			
 			mountComponent(vnode, container, anchor);
 		} else {
 			updateComponent(oldVnode, vnode, container, anchor);
@@ -234,6 +238,7 @@ export function createRenderer(options: any) {
 		const instance = vnode.component;
 		initSlot(instance);
 		// 把props 和attrs区分开
+		
 
 		getPropsAndAttrs(props, vnode.props, vnode.component);
 

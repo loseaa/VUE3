@@ -1,4 +1,4 @@
-import { isObject, isString } from '@vue3/shared';
+import { isFunction, isObject, isString } from '@vue3/shared';
 import { ShapeFlags } from './shapeFlags.js';
 import { isTeleport } from './Teleport.js';
 
@@ -42,7 +42,15 @@ function createTextVNode(text: string) {
 }
 
 function createVnode(type: string, props: any, children: any) {
-	let shapeFlag = isString(type) ? ShapeFlags.ELEMENT : isTeleport(type) ? ShapeFlags.TELEPORT : isObject(type) ? ShapeFlags.STATEFUL_COMPONENT : 0;
+	let shapeFlag = isString(type)
+		? ShapeFlags.ELEMENT
+		: isTeleport(type)
+			? ShapeFlags.TELEPORT
+			: isFunction(type)
+				? ShapeFlags.FUNCTIONAL_COMPONENT
+				: isObject(type)
+					? ShapeFlags.STATEFUL_COMPONENT
+					: 0;
 	if (children) {
 		if (isString(children)) {
 			shapeFlag |= ShapeFlags.TEXT_CHILDREN;

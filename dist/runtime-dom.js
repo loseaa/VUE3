@@ -601,18 +601,26 @@ function setProxy(instance) {
     }
   });
 }
+function renderComponents(instance) {
+  const { attrs, vnode, render: render2, proxy } = instance;
+  if (vnode.shapeFlag & 4 /* STATEFUL_COMPONENT */) {
+    return render2.call(proxy, proxy);
+  } else {
+    return vnode.type(attrs);
+  }
+}
 function setComponentEffct(instance, container, anchor, patch) {
   const componentUpdateFn = () => {
     const { render: render2 } = instance;
     if (!instance.isMounted) {
-      const subTree = render2.call(instance.proxy, instance.proxy);
+      const subTree = renderComponents(instance);
       instance.subTree = subTree;
       instance.hooks["bm" /* BEFOREMOUNTED */].forEach((fn) => fn());
       patch(null, subTree, container, anchor);
       instance.hooks["m" /* MOUNTED */].forEach((fn) => fn());
       instance.isMounted = true;
     } else {
-      const subTree = render2.call(instance.proxy, instance.proxy);
+      const subTree = renderComponents(instance);
       instance.hooks["bu" /* BEFOREUPDTATED */].forEach((fn) => fn());
       patch(instance.subTree, subTree, container, anchor);
       instance.subTree = subTree;
@@ -754,6 +762,11 @@ function createRenderer(options) {
       return;
     }
     if (vnode.shapeFlag & 4 /* STATEFUL_COMPONENT */) {
+      processComponents(oldVnode, vnode, container, anchor);
+      if (vnode.ref) {
+        setRef(vnode);
+      }
+    } else if (vnode.shapeFlag & 2 /* FUNCTIONAL_COMPONENT */) {
       processComponents(oldVnode, vnode, container, anchor);
       if (vnode.ref) {
         setRef(vnode);
@@ -1050,7 +1063,7 @@ function createTextVNode(text) {
   };
 }
 function createVnode(type, props, children) {
-  let shapeFlag = isString(type) ? 1 /* ELEMENT */ : isTeleport(type) ? 64 /* TELEPORT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
+  let shapeFlag = isString(type) ? 1 /* ELEMENT */ : isTeleport(type) ? 64 /* TELEPORT */ : isFunction(type) ? 2 /* FUNCTIONAL_COMPONENT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
   if (children) {
     if (isString(children)) {
       shapeFlag |= 8 /* TEXT_CHILDREN */;
