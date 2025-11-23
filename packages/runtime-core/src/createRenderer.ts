@@ -22,16 +22,16 @@ export function createRenderer(options: any) {
 		patchProp: hostPatchProp,
 	} = options;
 
-	function mountChildren(children: any, container: any) {
+	function mountChildren(children: any, container: any, anchor?: any, parentComponent?: any) {
 		if (!(children instanceof Array)) {
-			patch(null, children, container);
+			patch(null, children, container, anchor, parentComponent);
 		}
 		for (let i = 0; i < children.length; i++) {
-			patch(null, children[i], container);
+			patch(null, children[i], container, anchor, parentComponent);
 		}
 	}
 
-	function mountElement(vnode: any, container: any, anchor?: any) {
+	function mountElement(vnode: any, container: any, anchor?: any, parentComponent?: any) {
 		const { type, children, props, shapeFlag } = vnode;
 
 		if (type === 'text') {
@@ -50,9 +50,9 @@ export function createRenderer(options: any) {
 		}
 
 		if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
-			mountElement(children, el);
+			mountElement(children, el, anchor, parentComponent);
 		} else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-			mountChildren(children, el);
+			mountChildren(children, el, anchor, parentComponent);
 		}
 		hostInsert(el, container, anchor);
 	}
@@ -61,11 +61,11 @@ export function createRenderer(options: any) {
 		return oldVnode && vnode && oldVnode.type === vnode.type && oldVnode.key === vnode.key;
 	}
 
-	function processFragment(oldVnode: any, vnode: any, container: any, anchor?: any) {
+	function processFragment(oldVnode: any, vnode: any, container: any, anchor?: any, parentComponent?: any) {
 		if (!oldVnode) {
-			mountChildren(vnode.children, container);
+			mountChildren(vnode.children, container, anchor, parentComponent);
 		} else {
-			patchChildren(oldVnode, vnode, container);
+			patchChildren(oldVnode, vnode, container, anchor, parentComponent);
 		}
 	}
 
@@ -91,7 +91,7 @@ export function createRenderer(options: any) {
 		}
 	}
 
-	function patch(oldVnode: any, vnode: any, container: any, anchor?: any) {
+	function patch(oldVnode: any, vnode: any, container: any, anchor?: any, parentComponent?: any) {
 		if (vnode === oldVnode) {
 			return;
 		}
@@ -101,7 +101,7 @@ export function createRenderer(options: any) {
 
 		if (!oldVnode) {
 			if (vnode.shapeFlag & ShapeFlags.ELEMENT) {
-				mountElement(vnode, container, anchor);
+				mountElement(vnode, container, anchor, parentComponent);
 				if (vnode.ref) {
 					setRef(vnode);
 				}
@@ -117,7 +117,7 @@ export function createRenderer(options: any) {
 			return;
 		}
 		if (vnode.type === Fragment) {
-			processFragment(oldVnode, vnode, container, anchor);
+			processFragment(oldVnode, vnode, container, anchor, parentComponent);
 			if (vnode.ref) {
 				setRef(vnode);
 			}
@@ -138,12 +138,12 @@ export function createRenderer(options: any) {
 			return;
 		}
 		if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
-			processComponents(oldVnode, vnode, container, anchor);
+			processComponents(oldVnode, vnode, container, anchor, parentComponent);
 			if (vnode.ref) {
 				setRef(vnode);
 			}
 		} else if (vnode.shapeFlag & ShapeFlags.FUNCTIONAL_COMPONENT) {
-			processComponents(oldVnode, vnode, container, anchor);
+			processComponents(oldVnode, vnode, container, anchor, parentComponent);
 			if (vnode.ref) {
 				setRef(vnode);
 			}
@@ -151,7 +151,7 @@ export function createRenderer(options: any) {
 			if (!isSameVnodeType(oldVnode, vnode)) {
 				if (oldVnode) unmount(oldVnode);
 
-				mountElement(vnode, container, anchor);
+				mountElement(vnode, container, anchor, parentComponent);
 				if (vnode.ref) {
 					setRef(vnode);
 				}
@@ -165,11 +165,10 @@ export function createRenderer(options: any) {
 		}
 	}
 
-	function processComponents(oldVnode: any, vnode: any, container: any, anchor?: any) {
+	function processComponents(oldVnode: any, vnode: any, container: any, anchor?: any, parentComponent?: any) {
 		if (!oldVnode) {
 			// 首次挂载
-			
-			mountComponent(vnode, container, anchor);
+			mountComponent(vnode, container, anchor, parentComponent);
 		} else {
 			updateComponent(oldVnode, vnode, container, anchor);
 		}
@@ -231,10 +230,10 @@ export function createRenderer(options: any) {
 		if (instance.vnode.shapeFlag & ShapeFlags.SLOTS_CHILDREN) instance.slots = instance.vnode.children;
 	}
 
-	function mountComponent(vnode: any, container: any, anchor?: any) {
+	function mountComponent(vnode: any, container: any, anchor?: any, parentComponent?: any) {
 		const { render, props = {}, setup } = vnode.type;
 		// 创建一个组件实例
-		vnode.component = creatInstance(vnode);
+		vnode.component = creatInstance(vnode,parentComponent);
 		const instance = vnode.component;
 		initSlot(instance);
 		// 把props 和attrs区分开
@@ -270,7 +269,7 @@ export function createRenderer(options: any) {
 
 		if (!vnode.component.render) vnode.component.render = render;
 		// 组件的activeeffect,数据变化重新渲染
-		setComponentEffct(vnode.component, container, anchor, patch);
+		setComponentEffct(vnode.component, container, anchor, patch, parentComponent);
 	}
 
 	function patchProps(oldNode: any, vNode: any, el: HTMLElement) {
@@ -413,7 +412,7 @@ export function createRenderer(options: any) {
 		}
 	}
 
-	function patchChildren(oldVnode: any, vNode: any, el: HTMLElement) {
+	function patchChildren(oldVnode: any, vNode: any, el: HTMLElement, anchor?: any, parentComponent?: any) {
 		const oldChildren = oldVnode.children || [];
 		const newChildren = vNode.children || [];
 
@@ -433,7 +432,7 @@ export function createRenderer(options: any) {
 				patchKeyChildren(oldChildren, newChildren, el);
 				// diff算法
 			} else {
-				mountChildren(newChildren, el);
+				mountChildren(newChildren, el, anchor, parentComponent);
 			}
 		} else {
 			hostRemove(oldVnode.children.el);

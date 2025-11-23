@@ -544,7 +544,7 @@ var onUpdated = createHook("u" /* UPDATED */);
 var onBeforeUpdated = createHook("bu" /* BEFOREUPDTATED */);
 
 // packages/reactive/src/components.ts
-function creatInstance(vnode) {
+function creatInstance(vnode, parentComponent) {
   const { data = () => ({}) } = vnode.type;
   return {
     data: reactive(data()),
@@ -563,7 +563,9 @@ function creatInstance(vnode) {
       ["u" /* UPDATED */]: [],
       ["bm" /* BEFOREMOUNTED */]: [],
       ["bu" /* BEFOREUPDTATED */]: []
-    }
+    },
+    parentComponent,
+    provide: parentComponent?.provide ? parentComponent.provide : /* @__PURE__ */ Object.create(null)
   };
 }
 var publicProperty = {
@@ -609,20 +611,20 @@ function renderComponents(instance) {
     return vnode.type(attrs);
   }
 }
-function setComponentEffct(instance, container, anchor, patch) {
+function setComponentEffct(instance, container, anchor, patch, parentComponent) {
   const componentUpdateFn = () => {
     const { render: render2 } = instance;
     if (!instance.isMounted) {
       const subTree = renderComponents(instance);
       instance.subTree = subTree;
       instance.hooks["bm" /* BEFOREMOUNTED */].forEach((fn) => fn());
-      patch(null, subTree, container, anchor);
+      patch(null, subTree, container, anchor, instance);
       instance.hooks["m" /* MOUNTED */].forEach((fn) => fn());
       instance.isMounted = true;
     } else {
       const subTree = renderComponents(instance);
       instance.hooks["bu" /* BEFOREUPDTATED */].forEach((fn) => fn());
-      patch(instance.subTree, subTree, container, anchor);
+      patch(instance.subTree, subTree, container, anchor, instance);
       instance.subTree = subTree;
       instance.hooks["u" /* UPDATED */].forEach((fn) => fn());
     }
@@ -658,15 +660,15 @@ function createRenderer(options) {
     nextSibling: hostNextSibling,
     patchProp: hostPatchProp
   } = options;
-  function mountChildren(children, container) {
+  function mountChildren(children, container, anchor, parentComponent) {
     if (!(children instanceof Array)) {
-      patch(null, children, container);
+      patch(null, children, container, anchor, parentComponent);
     }
     for (let i = 0; i < children.length; i++) {
-      patch(null, children[i], container);
+      patch(null, children[i], container, anchor, parentComponent);
     }
   }
-  function mountElement(vnode, container, anchor) {
+  function mountElement(vnode, container, anchor, parentComponent) {
     const { type, children, props, shapeFlag } = vnode;
     if (type === "text") {
       const el2 = hostCreateText(children);
@@ -682,20 +684,20 @@ function createRenderer(options) {
       }
     }
     if (shapeFlag & 8 /* TEXT_CHILDREN */) {
-      mountElement(children, el);
+      mountElement(children, el, anchor, parentComponent);
     } else if (shapeFlag & 16 /* ARRAY_CHILDREN */) {
-      mountChildren(children, el);
+      mountChildren(children, el, anchor, parentComponent);
     }
     hostInsert(el, container, anchor);
   }
   function isSameVnodeType(oldVnode, vnode) {
     return oldVnode && vnode && oldVnode.type === vnode.type && oldVnode.key === vnode.key;
   }
-  function processFragment(oldVnode, vnode, container, anchor) {
+  function processFragment(oldVnode, vnode, container, anchor, parentComponent) {
     if (!oldVnode) {
-      mountChildren(vnode.children, container);
+      mountChildren(vnode.children, container, anchor, parentComponent);
     } else {
-      patchChildren(oldVnode, vnode, container);
+      patchChildren(oldVnode, vnode, container, anchor, parentComponent);
     }
   }
   function processText(oldVnode, vnode, container, anchor) {
@@ -718,7 +720,7 @@ function createRenderer(options) {
       vnode.ref.value = vnode.el;
     }
   }
-  function patch(oldVnode, vnode, container, anchor) {
+  function patch(oldVnode, vnode, container, anchor, parentComponent) {
     if (vnode === oldVnode) {
       return;
     }
@@ -727,7 +729,7 @@ function createRenderer(options) {
     }
     if (!oldVnode) {
       if (vnode.shapeFlag & 1 /* ELEMENT */) {
-        mountElement(vnode, container, anchor);
+        mountElement(vnode, container, anchor, parentComponent);
         if (vnode.ref) {
           setRef(vnode);
         }
@@ -742,7 +744,7 @@ function createRenderer(options) {
       return;
     }
     if (vnode.type === Fragment) {
-      processFragment(oldVnode, vnode, container, anchor);
+      processFragment(oldVnode, vnode, container, anchor, parentComponent);
       if (vnode.ref) {
         setRef(vnode);
       }
@@ -762,19 +764,19 @@ function createRenderer(options) {
       return;
     }
     if (vnode.shapeFlag & 4 /* STATEFUL_COMPONENT */) {
-      processComponents(oldVnode, vnode, container, anchor);
+      processComponents(oldVnode, vnode, container, anchor, parentComponent);
       if (vnode.ref) {
         setRef(vnode);
       }
     } else if (vnode.shapeFlag & 2 /* FUNCTIONAL_COMPONENT */) {
-      processComponents(oldVnode, vnode, container, anchor);
+      processComponents(oldVnode, vnode, container, anchor, parentComponent);
       if (vnode.ref) {
         setRef(vnode);
       }
     } else {
       if (!isSameVnodeType(oldVnode, vnode)) {
         if (oldVnode) unmount(oldVnode);
-        mountElement(vnode, container, anchor);
+        mountElement(vnode, container, anchor, parentComponent);
         if (vnode.ref) {
           setRef(vnode);
         }
@@ -787,9 +789,9 @@ function createRenderer(options) {
       }
     }
   }
-  function processComponents(oldVnode, vnode, container, anchor) {
+  function processComponents(oldVnode, vnode, container, anchor, parentComponent) {
     if (!oldVnode) {
-      mountComponent(vnode, container, anchor);
+      mountComponent(vnode, container, anchor, parentComponent);
     } else {
       updateComponent(oldVnode, vnode, container, anchor);
     }
@@ -839,9 +841,9 @@ function createRenderer(options) {
   function initSlot(instance) {
     if (instance.vnode.shapeFlag & 32 /* SLOTS_CHILDREN */) instance.slots = instance.vnode.children;
   }
-  function mountComponent(vnode, container, anchor) {
+  function mountComponent(vnode, container, anchor, parentComponent) {
     const { render: render3, props = {}, setup } = vnode.type;
-    vnode.component = creatInstance(vnode);
+    vnode.component = creatInstance(vnode, parentComponent);
     const instance = vnode.component;
     initSlot(instance);
     getPropsAndAttrs(props, vnode.props, vnode.component);
@@ -869,7 +871,7 @@ function createRenderer(options) {
       }
     }
     if (!vnode.component.render) vnode.component.render = render3;
-    setComponentEffct(vnode.component, container, anchor, patch);
+    setComponentEffct(vnode.component, container, anchor, patch, parentComponent);
   }
   function patchProps(oldNode, vNode, el) {
     const oldProps = oldNode.props || {};
@@ -982,7 +984,7 @@ function createRenderer(options) {
       }
     }
   }
-  function patchChildren(oldVnode, vNode, el) {
+  function patchChildren(oldVnode, vNode, el, anchor, parentComponent) {
     const oldChildren = oldVnode.children || [];
     const newChildren = vNode.children || [];
     if (vNode.shapeFlag & 8 /* TEXT_CHILDREN */) {
@@ -999,7 +1001,7 @@ function createRenderer(options) {
       } else if (oldVnode.shapeFlag & 16 /* ARRAY_CHILDREN */) {
         patchKeyChildren(oldChildren, newChildren, el);
       } else {
-        mountChildren(newChildren, el);
+        mountChildren(newChildren, el, anchor, parentComponent);
       }
     } else {
       hostRemove(oldVnode.children.el);
@@ -1095,6 +1097,29 @@ function createVnode(type, props, children) {
   };
 }
 
+// packages/runtime-core/src/APIInject.ts
+function inject(key, defaultValue) {
+  if (!currentInstance) {
+    return;
+  }
+  if (currentInstance.parentComponent && key in currentInstance.provide) {
+    return currentInstance.provide[key];
+  } else {
+    return defaultValue;
+  }
+}
+function provide(key, value) {
+  if (!currentInstance) {
+    return;
+  }
+  let provide2 = currentInstance.provide;
+  let parentProvide = currentInstance.parentComponent?.provide;
+  if (provide2 === parentProvide) {
+    provide2 = Object.create(parentProvide);
+  }
+  provide2[key] = value;
+}
+
 // packages/runtime-dom/index.ts
 var renderOption = Object.assign(nodeOps, { patchProp });
 var render = (vnode, container) => {
@@ -1108,10 +1133,12 @@ export {
   createRenderer,
   effect,
   h,
+  inject,
   onBeforeMount,
   onBeforeUpdated,
   onMounted,
   onUpdated,
+  provide,
   proxyRef,
   reactive,
   ref,

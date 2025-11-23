@@ -5,7 +5,8 @@ import { reactive } from './reactive.js';
 import { LIFECYCLE } from '../../runtime-core/src/lifeCycle.js';
 import { ShapeFlags } from '../../runtime-core/src/shapeFlags.js';
 
-export function creatInstance(vnode: any) {
+export function creatInstance(vnode: any,parentComponent?:any) {
+	
     const {data=()=>({})} =vnode.type
     
 	return {
@@ -25,7 +26,9 @@ export function creatInstance(vnode: any) {
             [LIFECYCLE.UPDATED]:[],
             [LIFECYCLE.BEFOREMOUNTED]:[],
             [LIFECYCLE.BEFOREUPDTATED]:[]
-        }
+        },
+		parentComponent:parentComponent,
+		provide:parentComponent?.provide?parentComponent.provide:Object.create(null),
 	};
 }
 
@@ -76,7 +79,8 @@ function renderComponents(instance:any){
 	}
 }
 
-export function setComponentEffct(instance: any,container:any,anchor:any,patch:any) {
+
+export function setComponentEffct(instance: any,container:any,anchor:any,patch:any,parentComponent?:any) {
 	
 	const componentUpdateFn = () => {
 
@@ -86,13 +90,13 @@ export function setComponentEffct(instance: any,container:any,anchor:any,patch:a
 			const subTree = renderComponents(instance);
 			instance.subTree = subTree;
 			instance.hooks[LIFECYCLE.BEFOREMOUNTED].forEach((fn:any)=>fn());
-			patch(null, subTree, container, anchor);
+			patch(null, subTree, container, anchor, instance);
 			instance.hooks[LIFECYCLE.MOUNTED].forEach((fn:any)=>fn());
 			instance.isMounted = true;
 		} else {
 			const subTree = renderComponents(instance);
 			instance.hooks[LIFECYCLE.BEFOREUPDTATED].forEach((fn:any)=>fn());
-			patch(instance.subTree, subTree, container, anchor);
+			patch(instance.subTree, subTree, container, anchor, instance);
             instance.subTree=subTree
             instance.hooks[LIFECYCLE.UPDATED].forEach((fn:any)=>fn());
 		}
