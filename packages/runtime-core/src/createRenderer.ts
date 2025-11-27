@@ -5,7 +5,16 @@ import { proxyRef, reactive } from '../../reactive/index.js';
 import { ReactiveEffect } from '../../reactive/src/effect.js';
 import { queueJob } from './schedule.js';
 import { hasOwn, isFunction } from '@vue3/shared/src/utils.js';
-import { clearCurrentInstance, creatInstance, setComponentEffct, setCurrentInstance, setProxy } from '../../reactive/src/components.js';
+import {
+	clearCurrentInstance,
+	creatInstance,
+	currentInstance,
+	renderComponents,
+	setComponentEffct,
+	setCurrentInstance,
+	setProxy,
+} from '../../reactive/src/components.js';
+import { isKeepAlive } from './KeepAlive.js';
 
 export const Fragment = Symbol('Fragment');
 
@@ -149,7 +158,7 @@ export function createRenderer(options: any) {
 			}
 		} else {
 			if (!isSameVnodeType(oldVnode, vnode)) {
-				if (oldVnode) unmount(oldVnode);
+				if (oldVnode) unmount(oldVnode, parentComponent);
 
 				mountElement(vnode, container, anchor, parentComponent);
 				if (vnode.ref) {
@@ -170,12 +179,13 @@ export function createRenderer(options: any) {
 			// 首次挂载
 			mountComponent(vnode, container, anchor, parentComponent);
 		} else {
-			updateComponent(oldVnode, vnode, container, anchor);
+			updateComponent(oldVnode, vnode, container, anchor, parentComponent);
 		}
 	}
 
 	function propsHasChanged(oldProps: any, newProps: any) {
-		if (Object.keys(oldProps).length !== Object.keys(newProps).length) return false;
+		if (!newProps) return false;
+		if (Object.keys(oldProps).length !== Object.keys(newProps).length) return true;
 		for (let key in newProps) {
 			if (newProps[key] !== oldProps[key]) {
 				return true;
@@ -185,6 +195,7 @@ export function createRenderer(options: any) {
 	}
 
 	function updateProps(vnode: any, oldProps: any, newProps: any) {
+		
 		const instance = vnode.component;
 		const props = vnode.props;
 		if (propsHasChanged(oldProps, newProps)) {
@@ -201,11 +212,28 @@ export function createRenderer(options: any) {
 		}
 	}
 
-	function updateComponent(oldVnode: any, vnode: any, container: any, anchor?: any) {
-		const { props: oldProps } = oldVnode.component;
-		const { props: newProps } = vnode;
-		vnode.component = oldVnode.component;
-		updateProps(vnode, oldProps, newProps);
+	function updateComponent(oldVnode: any, vnode: any, container: any, anchor?: any, parentComponent?: any) {
+		if (isKeepAlive(vnode.type) && isKeepAlive(oldVnode.type)) {
+			const { props: oldProps } = oldVnode.component;
+			const { props: newProps } = vnode;
+			let newChildren = vnode.children;
+			// let render = vnode.component.render;
+			vnode.component = oldVnode.component;
+			// vnode.component.render = render;
+			updateSlots(vnode, newChildren);
+			updateProps(vnode, oldProps, newProps);
+			vnode.component.update();
+		} else {
+			unmount(oldVnode, parentComponent);
+			mountComponent(vnode, container, anchor, parentComponent);
+		}
+	}
+	function updateSlots(vnode: any, newChildren: any) {
+		const instance = vnode.component;
+		const slots = instance.slots;
+		for (let key in slots) {
+			slots[key] = newChildren[key];
+		}
 	}
 
 	function getPropsAndAttrs(props: any, all: any, instance: any) {
@@ -233,11 +261,23 @@ export function createRenderer(options: any) {
 	function mountComponent(vnode: any, container: any, anchor?: any, parentComponent?: any) {
 		const { render, props = {}, setup } = vnode.type;
 		// 创建一个组件实例
-		vnode.component = creatInstance(vnode,parentComponent);
+		if (vnode.shapeFlag && vnode.shapeFlag & ShapeFlags.KETP_ALIVE) {
+			parentComponent.ctx.active(vnode, container, anchor);
+			return;
+		}
+		vnode.component = creatInstance(vnode, parentComponent);
 		const instance = vnode.component;
+		if (isKeepAlive(vnode.type)) {
+			instance.ctx.renderer = {
+				CreateElement: hostCreateElement,
+				move(vnode: any, container: any, anchor: any) {
+					hostInsert(vnode.component ? vnode.component.subTree.el : vnode.el, container, anchor);
+				},
+				unmount,
+			};
+		}
 		initSlot(instance);
 		// 把props 和attrs区分开
-		
 
 		getPropsAndAttrs(props, vnode.props, vnode.component);
 
@@ -287,27 +327,32 @@ export function createRenderer(options: any) {
 		}
 	}
 
-	function unmount(vNode: any) {
+	function unmount(vNode: any, parentComponent?: any) {
 		const { shapeFlag, type } = vNode;
+
 		if (type === Fragment) {
-			unmountChildren(vNode);
+			unmountChildren(vNode, parentComponent);
 			hostRemove();
+		} else if (shapeFlag & ShapeFlags.SHOULD_KEEP_ALIVE) {
+			parentComponent.ctx.deactive(vNode);
 		} else if (shapeFlag & ShapeFlags.TELEPORT) {
-			unmountChildren(vNode);
+			unmountChildren(vNode, parentComponent);
 			return;
 		} else if (shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
 			hostRemove(vNode.component.subTree.el);
+			return;
+		} else {
+			hostRemove(vNode.el);
 		}
-		hostRemove(vNode.el);
 	}
 
-	function unmountChildren(oldVnode: any) {
+	function unmountChildren(oldVnode: any, parentComponent?: any) {
 		for (let i = 0; i < oldVnode.children.length; i++) {
-			unmount(oldVnode.children[i]);
+			unmount(oldVnode.children[i], parentComponent);
 		}
 	}
 
-	function patchKeyChildren(oldChildren: any, newChildren: any, el: HTMLElement) {
+	function patchKeyChildren(oldChildren: any, newChildren: any, el: HTMLElement, parentComponent?: any) {
 		let i = 0;
 		let e1 = oldChildren.length - 1;
 		let e2 = newChildren.length - 1;
@@ -342,7 +387,7 @@ export function createRenderer(options: any) {
 			}
 		} else if (i > e2) {
 			for (let j = i; j <= e1; j++) {
-				unmount(oldChildren[j]);
+				unmount(oldChildren[j], parentComponent);
 			}
 		} else {
 			let s1 = i;
@@ -356,7 +401,7 @@ export function createRenderer(options: any) {
 			for (let j = s1; j <= e1; j++) {
 				if (!keytoNewIndex.has(oldChildren[j].key)) {
 					// 新的中没有就卸载
-					unmount(oldChildren[j]);
+					unmount(oldChildren[j], parentComponent);
 				} else {
 					// 新的中存在就把二者patch一下，等待后续交换位置即可
 					// patch就是更新好所有的属性，包括el
@@ -418,7 +463,7 @@ export function createRenderer(options: any) {
 
 		if (vNode.shapeFlag & ShapeFlags.TEXT_CHILDREN) {
 			if (oldVnode.shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-				unmountChildren(oldVnode);
+				unmountChildren(oldVnode, parentComponent);
 			}
 			if (oldChildren !== newChildren) {
 				hostSetElementText(el, newChildren.children);

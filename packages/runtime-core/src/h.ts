@@ -1,6 +1,7 @@
 import { isFunction, isObject, isString } from '@vue3/shared';
 import { ShapeFlags } from './shapeFlags.js';
 import { isTeleport } from './Teleport.js';
+import { isKeepAlive } from './KeepAlive.js';
 
 export function h(type: string, propsOrChildren?: any, children?: any) {
 	let l = arguments.length;
@@ -49,8 +50,8 @@ function createVnode(type: string, props: any, children: any) {
 			: isFunction(type)
 				? ShapeFlags.FUNCTIONAL_COMPONENT
 				: isObject(type)
-					? ShapeFlags.STATEFUL_COMPONENT
-					: 0;
+						? ShapeFlags.STATEFUL_COMPONENT
+						: 0;
 	if (children) {
 		if (isString(children)) {
 			shapeFlag |= ShapeFlags.TEXT_CHILDREN;

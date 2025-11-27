@@ -8,33 +8,37 @@
 	<body>
 		<div id="app"></div>
 		<script type="module">
-			import { h, render, Fragment,ref } from './runtime-dom.js';
+			import { h, render, Fragment, ref } from './runtime-dom.js';
 
-            let comp={
-                data:()=>{
-                    return {
-
-                    }
-                },
-                render(proxy){
-                    console.log(proxy.$slots);
-                    
-                    return h("div",[proxy.$slots.header(),h("div","okok"),proxy.$slots.footer()])
-                },
-                // setup
-            }
-			let vueComponent = {
-				data: () => {
-					return {
-						msg: "hello world",
+			let comp = {
+				setup(props, { slots }) {
+					return function () {
+						return h('div', [slots.default()]);
 					};
-				},
-				render() {
-                    return h(comp,null,{header:()=>h("div","header"),footer:()=>h("div","footer")}) 
-				},
 
+					// setup
+				},
 			};
-			render(h(vueComponent), app);
+			// let vueComponent = {
+			// 	render() {
+			// 		return h(comp, null, {default:()=>h("div","okok")});
+			// 	},
+			// };
+			let c1 = {
+				render() {
+					return h('div', 'C1');
+				},
+			};
+			let c2 = {
+				render() {
+					return h('div', 'C2');
+				},
+			};
+
+			render(h(c1), app);
+			setTimeout(() => {
+				render(h(c2), app);
+			}, 1000);
 		</script>
 	</body>
 </html>

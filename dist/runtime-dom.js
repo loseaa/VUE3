@@ -565,7 +565,8 @@ function creatInstance(vnode, parentComponent) {
       ["bu" /* BEFOREUPDTATED */]: []
     },
     parentComponent,
-    provide: parentComponent?.provide ? parentComponent.provide : /* @__PURE__ */ Object.create(null)
+    provide: parentComponent?.provide ? parentComponent.provide : /* @__PURE__ */ Object.create(null),
+    ctx: {}
   };
 }
 var publicProperty = {
@@ -613,7 +614,6 @@ function renderComponents(instance) {
 }
 function setComponentEffct(instance, container, anchor, patch, parentComponent) {
   const componentUpdateFn = () => {
-    const { render: render2 } = instance;
     if (!instance.isMounted) {
       const subTree = renderComponents(instance);
       instance.subTree = subTree;
@@ -644,6 +644,71 @@ function setCurrentInstance(instance) {
 }
 function clearCurrentInstance() {
   currentInstance = null;
+}
+
+// packages/runtime-core/src/KeepAlive.ts
+var keepAlive = {
+  __v_iskeepAlive: true,
+  props: {
+    max: Number
+  },
+  setup(props, { slots }) {
+    const max = props.max || Infinity;
+    const cache = /* @__PURE__ */ new Map();
+    const keys = /* @__PURE__ */ new Set();
+    let pendingCacheKey = null;
+    function cacheVnode(instance) {
+      cache.set(pendingCacheKey, instance.subTree);
+    }
+    onMounted((currentInstance3) => {
+      cacheVnode(currentInstance3);
+    });
+    onUpdated((currentInstance3) => {
+      cacheVnode(currentInstance3);
+    });
+    const { move, unmount } = currentInstance.ctx.renderer;
+    const cacheContainer = document.createElement("div");
+    currentInstance.ctx.deactive = (vnode) => {
+      move(vnode, cacheContainer, null);
+    };
+    currentInstance.ctx.active = (vnode, container, anchor) => {
+      move(vnode, container, anchor);
+    };
+    function reset(vnode) {
+      vnode.shapeFlag &= ~256 /* KETP_ALIVE */;
+      vnode.shapeFlag &= ~512 /* SHOULD_KEEP_ALIVE */;
+    }
+    function pruneCache(key) {
+      let vnode = cache.get(key);
+      reset(vnode);
+      cache.delete(key);
+      keys.delete(key);
+      unmount(vnode);
+    }
+    return function(e) {
+      let vnode = slots.default();
+      const key = vnode.key == null ? vnode.type : vnode.key;
+      let cacheNode = cache.get(key);
+      if (cacheNode) {
+        vnode.component = cacheNode.component;
+        vnode.shapeFlag |= 256 /* KETP_ALIVE */;
+        keys.delete(key);
+        keys.add(key);
+      } else {
+        pendingCacheKey = key;
+        keys.add(key);
+        if (keys.size > e.max) {
+          pruneCache(keys.values().next().value);
+        }
+      }
+      vnode.shapeFlag |= 512 /* SHOULD_KEEP_ALIVE */;
+      pendingCacheKey = key;
+      return vnode;
+    };
+  }
+};
+function isKeepAlive(component) {
+  return component.__v_iskeepAlive;
 }
 
 // packages/runtime-core/src/createRenderer.ts
@@ -775,7 +840,7 @@ function createRenderer(options) {
       }
     } else {
       if (!isSameVnodeType(oldVnode, vnode)) {
-        if (oldVnode) unmount(oldVnode);
+        if (oldVnode) unmount(oldVnode, parentComponent);
         mountElement(vnode, container, anchor, parentComponent);
         if (vnode.ref) {
           setRef(vnode);
@@ -793,11 +858,12 @@ function createRenderer(options) {
     if (!oldVnode) {
       mountComponent(vnode, container, anchor, parentComponent);
     } else {
-      updateComponent(oldVnode, vnode, container, anchor);
+      updateComponent(oldVnode, vnode, container, anchor, parentComponent);
     }
   }
   function propsHasChanged(oldProps, newProps) {
-    if (Object.keys(oldProps).length !== Object.keys(newProps).length) return false;
+    if (!newProps) return false;
+    if (Object.keys(oldProps).length !== Object.keys(newProps).length) return true;
     for (let key in newProps) {
       if (newProps[key] !== oldProps[key]) {
         return true;
@@ -819,11 +885,26 @@ function createRenderer(options) {
       }
     }
   }
-  function updateComponent(oldVnode, vnode, container, anchor) {
-    const { props: oldProps } = oldVnode.component;
-    const { props: newProps } = vnode;
-    vnode.component = oldVnode.component;
-    updateProps(vnode, oldProps, newProps);
+  function updateComponent(oldVnode, vnode, container, anchor, parentComponent) {
+    if (isKeepAlive(vnode.type) && isKeepAlive(oldVnode.type)) {
+      const { props: oldProps } = oldVnode.component;
+      const { props: newProps } = vnode;
+      let newChildren = vnode.children;
+      vnode.component = oldVnode.component;
+      updateSlots(vnode, newChildren);
+      updateProps(vnode, oldProps, newProps);
+      vnode.component.update();
+    } else {
+      unmount(oldVnode, parentComponent);
+      mountComponent(vnode, container, anchor, parentComponent);
+    }
+  }
+  function updateSlots(vnode, newChildren) {
+    const instance = vnode.component;
+    const slots = instance.slots;
+    for (let key in slots) {
+      slots[key] = newChildren[key];
+    }
   }
   function getPropsAndAttrs(props, all, instance) {
     let attrs = {};
@@ -843,8 +924,21 @@ function createRenderer(options) {
   }
   function mountComponent(vnode, container, anchor, parentComponent) {
     const { render: render3, props = {}, setup } = vnode.type;
+    if (vnode.shapeFlag && vnode.shapeFlag & 256 /* KETP_ALIVE */) {
+      parentComponent.ctx.active(vnode, container, anchor);
+      return;
+    }
     vnode.component = creatInstance(vnode, parentComponent);
     const instance = vnode.component;
+    if (isKeepAlive(vnode.type)) {
+      instance.ctx.renderer = {
+        CreateElement: hostCreateElement,
+        move(vnode2, container2, anchor2) {
+          hostInsert(vnode2.component ? vnode2.component.subTree.el : vnode2.el, container2, anchor2);
+        },
+        unmount
+      };
+    }
     initSlot(instance);
     getPropsAndAttrs(props, vnode.props, vnode.component);
     setProxy(vnode.component);
@@ -887,25 +981,29 @@ function createRenderer(options) {
       }
     }
   }
-  function unmount(vNode) {
+  function unmount(vNode, parentComponent) {
     const { shapeFlag, type } = vNode;
     if (type === Fragment) {
-      unmountChildren(vNode);
+      unmountChildren(vNode, parentComponent);
       hostRemove();
+    } else if (shapeFlag & 512 /* SHOULD_KEEP_ALIVE */) {
+      parentComponent.ctx.deactive(vNode);
     } else if (shapeFlag & 64 /* TELEPORT */) {
-      unmountChildren(vNode);
+      unmountChildren(vNode, parentComponent);
       return;
     } else if (shapeFlag & 4 /* STATEFUL_COMPONENT */) {
       hostRemove(vNode.component.subTree.el);
+      return;
+    } else {
+      hostRemove(vNode.el);
     }
-    hostRemove(vNode.el);
   }
-  function unmountChildren(oldVnode) {
+  function unmountChildren(oldVnode, parentComponent) {
     for (let i = 0; i < oldVnode.children.length; i++) {
-      unmount(oldVnode.children[i]);
+      unmount(oldVnode.children[i], parentComponent);
     }
   }
-  function patchKeyChildren(oldChildren, newChildren, el) {
+  function patchKeyChildren(oldChildren, newChildren, el, parentComponent) {
     let i = 0;
     let e1 = oldChildren.length - 1;
     let e2 = newChildren.length - 1;
@@ -938,7 +1036,7 @@ function createRenderer(options) {
       }
     } else if (i > e2) {
       for (let j = i; j <= e1; j++) {
-        unmount(oldChildren[j]);
+        unmount(oldChildren[j], parentComponent);
       }
     } else {
       let s1 = i;
@@ -949,7 +1047,7 @@ function createRenderer(options) {
       }
       for (let j = s1; j <= e1; j++) {
         if (!keytoNewIndex.has(oldChildren[j].key)) {
-          unmount(oldChildren[j]);
+          unmount(oldChildren[j], parentComponent);
         } else {
           let index = keytoNewIndex.get(oldChildren[j].key);
           patch(oldChildren[j], newChildren[index], el);
@@ -989,7 +1087,7 @@ function createRenderer(options) {
     const newChildren = vNode.children || [];
     if (vNode.shapeFlag & 8 /* TEXT_CHILDREN */) {
       if (oldVnode.shapeFlag & 16 /* ARRAY_CHILDREN */) {
-        unmountChildren(oldVnode);
+        unmountChildren(oldVnode, parentComponent);
       }
       if (oldChildren !== newChildren) {
         hostSetElementText(el, newChildren.children);
@@ -1134,6 +1232,8 @@ export {
   effect,
   h,
   inject,
+  isKeepAlive,
+  keepAlive,
   onBeforeMount,
   onBeforeUpdated,
   onMounted,

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script type="module">
+			import { h, render, Fragment, ref, keepAlive, onMounted } from './runtime-dom.js';
+			let prop={max:1};
+			let C1 = {
+				setup() {
+					onMounted(() => {
+						console.log('C1 mounted');
+					});
+					return function render() {
+						return h('div', ['C1']);
+					};
+				},
+			};
+			let C2 = {
+				setup() {
+					onMounted(() => {
+						console.log('C2 mounted');
+					});
+					return function render() {
+						return h('div', ['C2']);
+					};
+				},
+			};
+			let C3 = {
+				setup() {
+					onMounted(() => {
+						console.log('C3 mounted');
+					});
+					return function render() {
+						return h('div', 'C3');
+					};
+				},
+			};
+
+			let vueComponent = {
+				render() {
+					return h();
+				},
+			};
+			render(h(keepAlive, null, { default: () => h(C1,{key:'C1'}) }), app);
+
+			setTimeout(() => {
+				render(h(keepAlive, prop, { default: () => h(C2,{key:'C2'}) }), app);
+			}, 1000);
+			setTimeout(() => {
+			    render(h(keepAlive, prop, { default: () => h(C2,{key:'C2'}) }), app);
+			}, 2000);
+
+			setTimeout(() => {
+			    render(h(keepAlive, prop, { default: () => h(C2,{key:'C2'}) }), app);
+			}, 3000);			setTimeout(() => {
+			    render(h(keepAlive, prop, { default: () => h(C3,{key:'C3'}) }), app);
+			}, 4000);
+		</script>
+	</body>
+</html>

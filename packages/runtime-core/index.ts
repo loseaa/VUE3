@@ -4,3 +4,4 @@ export { h, } from "./src/h.js";
 
 export { onMounted,onBeforeMount,onUpdated,onBeforeUpdated } from './src/lifeCycle.js';
 export { inject,provide } from './src/APIInject.js';
+export { keepAlive,isKeepAlive } from './src/KeepAlive.js';
