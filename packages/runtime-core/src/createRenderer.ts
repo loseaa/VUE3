@@ -41,8 +41,7 @@ export function createRenderer(options: any) {
 	}
 
 	function mountElement(vnode: any, container: any, anchor?: any, parentComponent?: any) {
-		const { type, children, props, shapeFlag } = vnode;
-
+		const { type, children, props, shapeFlag, transition } = vnode;
 		if (type === 'text') {
 			const el = hostCreateText(children);
 			vnode.el = el;
@@ -63,7 +62,13 @@ export function createRenderer(options: any) {
 		} else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
 			mountChildren(children, el, anchor, parentComponent);
 		}
+		if (transition) {
+			transition.beforeEnter(el);
+		}
 		hostInsert(el, container, anchor);
+		if(transition){
+			transition.enter(el)
+		}
 	}
 
 	function isSameVnodeType(oldVnode: any, vnode: any) {
@@ -328,7 +333,7 @@ export function createRenderer(options: any) {
 	}
 
 	function unmount(vNode: any, parentComponent?: any) {
-		const { shapeFlag, type } = vNode;
+		const { shapeFlag, type,transition } = vNode;
 
 		if (type === Fragment) {
 			unmountChildren(vNode, parentComponent);
@@ -339,10 +344,21 @@ export function createRenderer(options: any) {
 			unmountChildren(vNode, parentComponent);
 			return;
 		} else if (shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
-			hostRemove(vNode.component.subTree.el);
+			unmount(vNode.component.subTree);
 			return;
-		} else {
-			hostRemove(vNode.el);
+		} else if(shapeFlag & ShapeFlags.FUNCTIONAL_COMPONENT){
+			unmount(vNode.component.subTree);
+			return 
+		}else {
+			if(transition){
+				
+				transition.beforeLeave(vNode.el,()=>{
+					hostRemove(vNode.el)
+				});
+			}else{
+				hostRemove(vNode.el);
+			}
+
 		}
 	}
 

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+
+	<style>
+		.xxx-enter-active,
+		.xxx-leave-active {
+			transition: all 3s ease;
+		}
+
+		.xxx-enter-from,
+		.xxx-leave-to {
+			opacity: 0;
+		}
+	</style>
+	<body>
+		<div id="app"></div>
+		<div id="root"></div>
+		<div id="root2"></div>
+		<script type="module">
+			import { h, render, ref, Transition } from './runtime-dom.js';
+			let props = {
+				name: 'xxx',
+				onBeforeEnter: (el) => {
+					console.log('onBeforeEnter');
+				},
+				onEnter: (el) => {
+					console.log('onEnter');
+				},
+				onBeforeLeave: (el) => {
+					console.log('onBeforeLeave');
+				},
+				onLeave: (el) => {
+					console.log('onLeave');
+				},
+			};
+			render(h(Transition, props, { default: () => h('div', { style: { width: '100px', height: '100px', backgroundColor: 'red' } }) }), app);
+			setTimeout(() => {
+				render(h(Transition, props, { default: () => h('p', { style: { width: '100px', height: '100px', backgroundColor: 'blue' } }) }), app);
+			}, 1000);
+		</script>
+	</body>
+</html>

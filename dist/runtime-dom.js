@@ -605,11 +605,11 @@ function setProxy(instance) {
   });
 }
 function renderComponents(instance) {
-  const { attrs, vnode, render: render2, proxy } = instance;
+  const { attrs, vnode, render: render2, proxy, slots } = instance;
   if (vnode.shapeFlag & 4 /* STATEFUL_COMPONENT */) {
     return render2.call(proxy, proxy);
   } else {
-    return vnode.type(attrs);
+    return vnode.type(attrs, { slots });
   }
 }
 function setComponentEffct(instance, container, anchor, patch, parentComponent) {
@@ -734,7 +734,7 @@ function createRenderer(options) {
     }
   }
   function mountElement(vnode, container, anchor, parentComponent) {
-    const { type, children, props, shapeFlag } = vnode;
+    const { type, children, props, shapeFlag, transition } = vnode;
     if (type === "text") {
       const el2 = hostCreateText(children);
       vnode.el = el2;
@@ -753,7 +753,13 @@ function createRenderer(options) {
     } else if (shapeFlag & 16 /* ARRAY_CHILDREN */) {
       mountChildren(children, el, anchor, parentComponent);
     }
+    if (transition) {
+      transition.beforeEnter(el);
+    }
     hostInsert(el, container, anchor);
+    if (transition) {
+      transition.enter(el);
+    }
   }
   function isSameVnodeType(oldVnode, vnode) {
     return oldVnode && vnode && oldVnode.type === vnode.type && oldVnode.key === vnode.key;
@@ -982,7 +988,7 @@ function createRenderer(options) {
     }
   }
   function unmount(vNode, parentComponent) {
-    const { shapeFlag, type } = vNode;
+    const { shapeFlag, type, transition } = vNode;
     if (type === Fragment) {
       unmountChildren(vNode, parentComponent);
       hostRemove();
@@ -992,10 +998,19 @@ function createRenderer(options) {
       unmountChildren(vNode, parentComponent);
       return;
     } else if (shapeFlag & 4 /* STATEFUL_COMPONENT */) {
-      hostRemove(vNode.component.subTree.el);
+      unmount(vNode.component.subTree);
+      return;
+    } else if (shapeFlag & 2 /* FUNCTIONAL_COMPONENT */) {
+      unmount(vNode.component.subTree);
       return;
     } else {
-      hostRemove(vNode.el);
+      if (transition) {
+        transition.beforeLeave(vNode.el, () => {
+          hostRemove(vNode.el);
+        });
+      } else {
+        hostRemove(vNode.el);
+      }
     }
   }
   function unmountChildren(oldVnode, parentComponent) {
@@ -1218,6 +1233,98 @@ function provide(key, value) {
   provide2[key] = value;
 }
 
+// packages/runtime-core/src/Transition.ts
+function Transition(props, { slots }) {
+  return h(TransitionImpl, resolveProps(props), slots);
+}
+function nextFrame(callback) {
+  requestAnimationFrame(callback);
+}
+function resolveProps(props) {
+  const {
+    name,
+    enterFromClass = `${name}-enter-from`,
+    enterActiveClass = `${name}-enter-active`,
+    leaveToClass = `${name}-leave-to`,
+    leaveFromClass = `${name}-leave-from`,
+    leaveActiveClass = `${name}-leave-active`,
+    enterToClass = `${name}-enter-to`,
+    onBeforeEnter = () => {
+    },
+    onEnter = () => {
+    },
+    onBeforeLeave = () => {
+    },
+    onLeave = () => {
+    }
+  } = props;
+  return {
+    onBeforeEnter(el) {
+      onBeforeEnter && onBeforeEnter(el);
+      el.classList.add(enterFromClass);
+      el.classList.add(enterActiveClass);
+    },
+    onEnter(el, done) {
+      const resolve = () => {
+        el.classList.remove(enterFromClass);
+        el.classList.remove(enterToClass);
+        done && done();
+      };
+      onEnter && onEnter(el, resolve);
+      el.classList.remove(enterFromClass);
+      nextFrame(() => {
+        el.classList.remove(enterActiveClass);
+        el.classList.add(enterToClass);
+        if (!onEnter || onEnter.length <= 1) {
+          el.addEventListener("transitionend", resolve);
+        }
+      });
+    },
+    onBeforeLeave(el, done) {
+      const resolve = () => {
+        el.classList.remove(leaveFromClass);
+        el.classList.remove(leaveToClass);
+        done();
+      };
+      el.classList.add(leaveFromClass);
+      document.body.offsetHeight;
+      el.classList.add(leaveActiveClass);
+      onBeforeLeave && onBeforeLeave(el, resolve);
+      nextFrame(() => {
+        el.classList.remove(leaveFromClass);
+        el.classList.add(leaveToClass);
+      });
+      if (!onBeforeLeave || onBeforeLeave.length <= 1) {
+        el.addEventListener("transitionend", resolve);
+      }
+    }
+  };
+}
+var TransitionImpl = {
+  name: "Transition",
+  props: {
+    onBeforeEnter: Function,
+    onEnter: Function,
+    onBeforeLeave: Function,
+    onLeave: Function
+  },
+  setup(props, { slots }) {
+    return () => {
+      let vnode = slots.default();
+      if (!vnode) {
+        return;
+      }
+      vnode.transition = {
+        beforeEnter: props.onBeforeEnter,
+        enter: props.onEnter,
+        beforeLeave: props.onBeforeLeave,
+        leave: props.onLeave
+      };
+      return vnode;
+    };
+  }
+};
+
 // packages/runtime-dom/index.ts
 var renderOption = Object.assign(nodeOps, { patchProp });
 var render = (vnode, container) => {
@@ -1227,6 +1334,7 @@ console.log(render);
 export {
   Fragment,
   Teleport,
+  Transition,
   computed,
   createRenderer,
   effect,

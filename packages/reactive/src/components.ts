@@ -71,11 +71,11 @@ export function setProxy(instance: any) {
 }
 
 export function renderComponents(instance: any) {
-	const { attrs, vnode, render, proxy } = instance;
+	const { attrs, vnode, render, proxy, slots } = instance;
 	if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
 		return render.call(proxy, proxy);
 	}  else {
-		return vnode.type(attrs);
+		return vnode.type(attrs, {slots});
 	}
 }
 

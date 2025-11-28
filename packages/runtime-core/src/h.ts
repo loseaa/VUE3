@@ -3,7 +3,7 @@ import { ShapeFlags } from './shapeFlags.js';
 import { isTeleport } from './Teleport.js';
 import { isKeepAlive } from './KeepAlive.js';
 
-export function h(type: string, propsOrChildren?: any, children?: any) {
+export function h(type: any, propsOrChildren?: any, children?: any) {
 	let l = arguments.length;
 	if (l === 2) {
 		if (typeof propsOrChildren === 'object' && !propsOrChildren.__v_isVnode && !(propsOrChildren instanceof Array)) {
