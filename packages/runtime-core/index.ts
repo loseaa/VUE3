@@ -6,3 +6,4 @@ export { onMounted,onBeforeMount,onUpdated,onBeforeUpdated } from './src/lifeCyc
 export { inject,provide } from './src/APIInject.js';
 export { keepAlive,isKeepAlive } from './src/KeepAlive.js';
 export { Transition } from './src/Transition.js';
+export { defineAsyncComponent } from './src/defineAsyncComponent.js';
