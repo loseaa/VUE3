@@ -42,7 +42,7 @@ function createTextVNode(text: string) {
 	};
 }
 
-function createVnode(type: string, props: any, children: any) {
+function createVnode(type: string, props: any, children: any, patchFlag?: number) {
 	let shapeFlag = isString(type)
 		? ShapeFlags.ELEMENT
 		: isTeleport(type)
@@ -50,8 +50,9 @@ function createVnode(type: string, props: any, children: any) {
 			: isFunction(type)
 				? ShapeFlags.FUNCTIONAL_COMPONENT
 				: isObject(type)
-						? ShapeFlags.STATEFUL_COMPONENT
-						: 0;
+					? ShapeFlags.STATEFUL_COMPONENT
+					: 0;
+
 	if (children) {
 		if (isString(children)) {
 			shapeFlag |= ShapeFlags.TEXT_CHILDREN;
@@ -61,6 +62,7 @@ function createVnode(type: string, props: any, children: any) {
 			shapeFlag |= ShapeFlags.SLOTS_CHILDREN;
 		}
 	}
+
 	if (children && isString(children)) {
 		children = createTextVNode(children);
 	}
@@ -71,7 +73,7 @@ function createVnode(type: string, props: any, children: any) {
 			}
 		}
 	}
-	return {
+	const vnode = {
 		__v_isVnode: true,
 		type,
 		props,
@@ -80,5 +82,37 @@ function createVnode(type: string, props: any, children: any) {
 		shapeFlag,
 		el: null,
 		ref: props?.ref,
+		patchFlag,
 	};
+	if (patchFlag) {
+		currentBlock.push(vnode);
+	}
+	return vnode;
+}
+
+export let currentBlock: any = null;
+
+export function openBlock() {
+	currentBlock = [];
+}
+
+export function closeBlock() {
+	currentBlock = null;
+}
+
+function setupVnode(vnode: any) {
+	vnode.dynamicChildren = currentBlock;
+	return vnode;
+}
+
+export function createElementBlock(type: string, props: any, children: any, patchFlag?: number) {
+	return setupVnode(createVnode(type, props, children, patchFlag));
+}
+
+export function createElementVNode(type: string, props: any, children: any, patchFlag?: number) {
+	return createVnode(type, props, children, patchFlag);
+}
+
+export function toDisplayString(value: any) {
+	return isString(value) ? value : String(value);
 }

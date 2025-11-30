@@ -22,21 +22,40 @@ export function defineAsyncComponent(option: any) {
                 state.value.error = "TIMEOUT";
                 errorComponent&&(state.value.error=errorComponent());
             }, timeout);
+            let attempts=0;
+            function loadFn(){
+                return loader().catch((err: any) => {
+                    if(onError){
+                        return new Promise((resolve, reject) => {
+                            let retry=()=>{
+                                resolve(loadFn());
+                            }
+                            let fail=()=>{
+                                reject(err);
+                            }
+                            onError(err, retry, fail, ++attempts);
+                        });
 
-            loader().then((component: any) => {
+                    }else{
+                        throw err;
+                    }
+                })
+            }
+
+            loadFn().then((component: any) => {
                 state.value.loading = false;
                 state.value.loaded = true;
                 state.value.component = component;
             }).catch((err: any) => {
                 state.value.loading = false;
                 state.value.error = err;
-                errorComponent&&(state.value.error=errorComponent());
+                // errorComponent&&(state.value.error=errorComponent());
             })
             return ()=>{
                 if(state.value.loaded) {
                     return state.value.component;
                 } else if(state.value.error) {
-                    return state.value.error;
+                    return errorComponent&&errorComponent();
                 } else if(state.value.loading) {
                     return loadingComponent&&loadingComponent();
                 }else{

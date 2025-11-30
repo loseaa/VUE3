@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script type="module">
+			import { h,ref, render, Fragment, createElementBlock,createElementVNode,openBlock,toDisplayString } from './runtime-dom.js';
+			// import { } from 'https://cdn.bootcdn.net/ajax/libs/vue/3.5.22/vue.esm-browser.min.js';
+
+
+            let vueComponent={
+                setup(){
+                    let name=ref('vue3');
+                    setTimeout(() => {
+                        name.value='react';
+                    }, 2000);
+                    return {
+                        name
+                    }
+                },
+                render(_ctx, _cache, $props, $setup, $data, $options) {
+                    let vnode=(
+						openBlock(),
+						createElementBlock('div', null, [
+							createElementVNode('p', null, ' hello world'),
+							createElementVNode('span', null, toDisplayString(_ctx.name), 1 /* TEXT */),
+						])
+					);
+                    console.log(vnode);
+                    return vnode
+				},
+            }
+
+            
+
+			render(h(vueComponent), app);
+		</script>
+	</body>
+</html>

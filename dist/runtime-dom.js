@@ -711,6 +711,100 @@ function isKeepAlive(component) {
   return component.__v_iskeepAlive;
 }
 
+// packages/runtime-core/src/h.ts
+function h(type, propsOrChildren, children) {
+  let l = arguments.length;
+  if (l === 2) {
+    if (typeof propsOrChildren === "object" && !propsOrChildren.__v_isVnode && !(propsOrChildren instanceof Array)) {
+      return createVnode(type, propsOrChildren, null);
+    } else {
+      if (isString(propsOrChildren)) {
+        return createVnode(type, null, propsOrChildren);
+      }
+      if (propsOrChildren instanceof Array) {
+        return createVnode(type, null, propsOrChildren);
+      }
+      return createVnode(type, null, [propsOrChildren]);
+    }
+  } else if (l === 3) {
+    if (isString(children)) {
+      return createVnode(type, propsOrChildren, children);
+    }
+    if (children && !(children instanceof Array)) {
+      children = children;
+    }
+    return createVnode(type, propsOrChildren, children);
+  } else {
+    let children2 = [];
+    for (let i = 2; i < l; i++) {
+      children2.push(arguments[i]);
+    }
+    return createVnode(type, propsOrChildren, children2);
+  }
+}
+function createTextVNode(text) {
+  return {
+    type: "text",
+    children: text,
+    el: null
+    // 在挂载时才会设置
+  };
+}
+function createVnode(type, props, children, patchFlag) {
+  let shapeFlag = isString(type) ? 1 /* ELEMENT */ : isTeleport(type) ? 64 /* TELEPORT */ : isFunction(type) ? 2 /* FUNCTIONAL_COMPONENT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
+  if (children) {
+    if (isString(children)) {
+      shapeFlag |= 8 /* TEXT_CHILDREN */;
+    } else if (children instanceof Array) {
+      shapeFlag |= 16 /* ARRAY_CHILDREN */;
+    } else if (children instanceof Object) {
+      shapeFlag |= 32 /* SLOTS_CHILDREN */;
+    }
+  }
+  if (children && isString(children)) {
+    children = createTextVNode(children);
+  }
+  if (children) {
+    for (let i = 0; i < children.length; i++) {
+      if (isString(children[i])) {
+        children[i] = createTextVNode(children[i]);
+      }
+    }
+  }
+  const vnode = {
+    __v_isVnode: true,
+    type,
+    props,
+    children,
+    key: props?.key,
+    shapeFlag,
+    el: null,
+    ref: props?.ref,
+    patchFlag
+  };
+  if (patchFlag) {
+    currentBlock.push(vnode);
+  }
+  return vnode;
+}
+var currentBlock = null;
+function openBlock() {
+  currentBlock = [];
+}
+function setupVnode(vnode) {
+  vnode.dynamicChildren = currentBlock;
+  return vnode;
+}
+function createElementBlock(type, props, children, patchFlag) {
+  return setupVnode(createVnode(type, props, children, patchFlag));
+}
+function createElementVNode(type, props, children, patchFlag) {
+  return createVnode(type, props, children, patchFlag);
+}
+function toDisplayString(value) {
+  return isString(value) ? value : String(value);
+}
+
 // packages/runtime-core/src/createRenderer.ts
 var Fragment = Symbol("Fragment");
 function createRenderer(options) {
@@ -734,7 +828,7 @@ function createRenderer(options) {
     }
   }
   function mountElement(vnode, container, anchor, parentComponent) {
-    const { type, children, props, shapeFlag, transition } = vnode;
+    const { type, children, props, shapeFlag, transition, patchFlag } = vnode;
     if (type === "text") {
       const el2 = hostCreateText(children);
       vnode.el = el2;
@@ -853,7 +947,7 @@ function createRenderer(options) {
         }
         return;
       } else {
-        patchElement(oldVnode, vnode);
+        patchElement(oldVnode, vnode, container, anchor);
         if (vnode.ref) {
           setRef(vnode);
         }
@@ -1120,10 +1214,28 @@ function createRenderer(options) {
       hostRemove(oldVnode.children.el);
     }
   }
-  function patchElement(oldVnode, vnode) {
+  function patchBlockChildren(oldVnode, vnode, el, anchor, parentComponent) {
+    for (let i = 0; i < vnode.dynamicChildren.length; i++) {
+      patch(oldVnode.dynamicChildren[i], vnode.dynamicChildren[i], el, anchor, parentComponent);
+    }
+  }
+  function patchElement(oldVnode, vnode, container, anchor, parentComponent) {
     const el = vnode.el = oldVnode.el;
-    patchProps(oldVnode, vnode, el);
-    patchChildren(oldVnode, vnode, el);
+    if (vnode.patchFlag && vnode.patchFlag & 8 /* PROPS */) {
+      patchProps(oldVnode, vnode, el);
+    }
+    if (vnode.patchFlag && vnode.patchFlag & 2 /* CLASS */) {
+    }
+    if (vnode.patchFlag && vnode.patchFlag & 1 /* TEXT */) {
+      if (oldVnode.children.children !== vnode.children.children) {
+        hostSetElementText(el, vnode.children.children);
+      }
+    }
+    if (vnode.dynamicChildren) {
+      patchBlockChildren(oldVnode, vnode, el, anchor, parentComponent);
+    } else {
+      patchChildren(oldVnode, vnode, el, anchor, parentComponent);
+    }
   }
   let render2 = (vnode, container) => {
     if (container._node) {
@@ -1135,78 +1247,6 @@ function createRenderer(options) {
   };
   return {
     render: render2
-  };
-}
-
-// packages/runtime-core/src/h.ts
-function h(type, propsOrChildren, children) {
-  let l = arguments.length;
-  if (l === 2) {
-    if (typeof propsOrChildren === "object" && !propsOrChildren.__v_isVnode && !(propsOrChildren instanceof Array)) {
-      return createVnode(type, propsOrChildren, null);
-    } else {
-      if (isString(propsOrChildren)) {
-        return createVnode(type, null, propsOrChildren);
-      }
-      if (propsOrChildren instanceof Array) {
-        return createVnode(type, null, propsOrChildren);
-      }
-      return createVnode(type, null, [propsOrChildren]);
-    }
-  } else if (l === 3) {
-    if (isString(children)) {
-      return createVnode(type, propsOrChildren, children);
-    }
-    if (children && !(children instanceof Array)) {
-      children = children;
-    }
-    return createVnode(type, propsOrChildren, children);
-  } else {
-    let children2 = [];
-    for (let i = 2; i < l; i++) {
-      children2.push(arguments[i]);
-    }
-    return createVnode(type, propsOrChildren, children2);
-  }
-}
-function createTextVNode(text) {
-  return {
-    type: "text",
-    children: text,
-    el: null
-    // 在挂载时才会设置
-  };
-}
-function createVnode(type, props, children) {
-  let shapeFlag = isString(type) ? 1 /* ELEMENT */ : isTeleport(type) ? 64 /* TELEPORT */ : isFunction(type) ? 2 /* FUNCTIONAL_COMPONENT */ : isObject(type) ? 4 /* STATEFUL_COMPONENT */ : 0;
-  if (children) {
-    if (isString(children)) {
-      shapeFlag |= 8 /* TEXT_CHILDREN */;
-    } else if (children instanceof Array) {
-      shapeFlag |= 16 /* ARRAY_CHILDREN */;
-    } else if (children instanceof Object) {
-      shapeFlag |= 32 /* SLOTS_CHILDREN */;
-    }
-  }
-  if (children && isString(children)) {
-    children = createTextVNode(children);
-  }
-  if (children) {
-    for (let i = 0; i < children.length; i++) {
-      if (isString(children[i])) {
-        children[i] = createTextVNode(children[i]);
-      }
-    }
-  }
-  return {
-    __v_isVnode: true,
-    type,
-    props,
-    children,
-    key: props?.key,
-    shapeFlag,
-    el: null,
-    ref: props?.ref
   };
 }
 
@@ -1345,20 +1385,37 @@ function defineAsyncComponent(option) {
         state.value.error = "TIMEOUT";
         errorComponent && (state.value.error = errorComponent());
       }, timeout);
-      loader().then((component) => {
+      let attempts = 0;
+      function loadFn() {
+        return loader().catch((err) => {
+          if (onError) {
+            return new Promise((resolve, reject) => {
+              let retry = () => {
+                resolve(loadFn());
+              };
+              let fail = () => {
+                reject(err);
+              };
+              onError(err, retry, fail, ++attempts);
+            });
+          } else {
+            throw err;
+          }
+        });
+      }
+      loadFn().then((component) => {
         state.value.loading = false;
         state.value.loaded = true;
         state.value.component = component;
       }).catch((err) => {
         state.value.loading = false;
         state.value.error = err;
-        errorComponent && (state.value.error = errorComponent());
       });
       return () => {
         if (state.value.loaded) {
           return state.value.component;
         } else if (state.value.error) {
-          return state.value.error;
+          return errorComponent && errorComponent();
         } else if (state.value.loading) {
           return loadingComponent && loadingComponent();
         } else {
@@ -1380,6 +1437,8 @@ export {
   Teleport,
   Transition,
   computed,
+  createElementBlock,
+  createElementVNode,
   createRenderer,
   defineAsyncComponent,
   effect,
@@ -1391,12 +1450,14 @@ export {
   onBeforeUpdated,
   onMounted,
   onUpdated,
+  openBlock,
   provide,
   proxyRef,
   reactive,
   ref,
   render,
   renderOption,
+  toDisplayString,
   toRef,
   toRefs,
   watch,

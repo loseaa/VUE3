@@ -15,6 +15,8 @@ import {
 	setProxy,
 } from '../../reactive/src/components.js';
 import { isKeepAlive } from './KeepAlive.js';
+import { closeBlock, currentBlock } from './h.js';
+import { PatchFlags } from './patchFlags.js';
 
 export const Fragment = Symbol('Fragment');
 
@@ -41,7 +43,9 @@ export function createRenderer(options: any) {
 	}
 
 	function mountElement(vnode: any, container: any, anchor?: any, parentComponent?: any) {
-		const { type, children, props, shapeFlag, transition } = vnode;
+		
+		const { type, children, props, shapeFlag, transition, patchFlag } = vnode;
+
 		if (type === 'text') {
 			const el = hostCreateText(children);
 			vnode.el = el;
@@ -171,12 +175,13 @@ export function createRenderer(options: any) {
 				}
 				return;
 			} else {
-				patchElement(oldVnode, vnode);
+				patchElement(oldVnode, vnode, container,anchor);
 				if (vnode.ref) {
 					setRef(vnode);
 				}
 			}
 		}
+		
 	}
 
 	function processComponents(oldVnode: any, vnode: any, container: any, anchor?: any, parentComponent?: any) {
@@ -500,10 +505,34 @@ export function createRenderer(options: any) {
 		}
 	}
 
-	function patchElement(oldVnode: any, vnode: any) {
+	function patchBlockChildren(oldVnode: any, vnode: any, el: HTMLElement,anchor?:any,parentComponent?:any) {
+		for(let i=0;i<vnode.dynamicChildren.length;i++){
+			patch(oldVnode.dynamicChildren[i], vnode.dynamicChildren[i], el,anchor,parentComponent);
+		}
+	}
+
+	function patchElement(oldVnode: any, vnode: any,container:any,anchor?:any,parentComponent?:any) {
+
 		const el = (vnode.el = oldVnode.el);
-		patchProps(oldVnode, vnode, el);
-		patchChildren(oldVnode, vnode, el);
+		if(vnode.patchFlag&&(vnode.patchFlag&PatchFlags.PROPS)){
+			patchProps(oldVnode, vnode, el);
+		}
+		if(vnode.patchFlag&&(vnode.patchFlag&PatchFlags.CLASS)){
+			// patchClass(oldVnode, vnode, el);
+		}
+		if(vnode.patchFlag&&(vnode.patchFlag&PatchFlags.TEXT)){
+			// patchStyle(oldVnode, vnode, el);
+			// debugger
+			if(oldVnode.children.children!==vnode.children.children){
+				hostSetElementText(el, vnode.children.children);
+			}
+		}
+		if(vnode.dynamicChildren){
+			
+			patchBlockChildren(oldVnode, vnode, el,anchor,parentComponent);
+		}else{
+			patchChildren(oldVnode, vnode, el,anchor,parentComponent);
+		}
 	}
 
 	let render = (vnode: any, container: any) => {

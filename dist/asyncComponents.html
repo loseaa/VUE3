@@ -9,15 +9,19 @@
 		<div id="app"></div>
 		<script type="module">
 			import { h, render, Fragment, ref, defineAsyncComponent } from './runtime-dom.js';
-
+let count=2;
 			let loader = () => {
 				return new Promise((resolve, reject) => {
 					setTimeout(() => {
-						resolve(h('div', null, 'hello world Async component'));
+						if(count--){
+							reject(new Error("加载失败"));
+						}else{
+							resolve(h('div', null, 'hello world Async component'));
+						}
 					}, 2000);
 				});
 			};
-
+			
 			let comp = defineAsyncComponent({
 				loader,
 				loadingComponent: () => h('div', null, 'loading...'),
@@ -25,7 +29,11 @@
 				delay: 800,
 				timeout: 3000,
 				onError(error,retry,fail,attempts){
-					console.log(error);
+					console.log(error,retry,fail,attempts);
+					setTimeout(() => {
+						retry();
+					}, 1000);
+					console.log("尝试重新加载");
 				}
 			});
 			render(h(comp), app);
